@@ -329,6 +329,98 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   #mainContent { left: 0; }
   .topbar-brand { width: auto; }
 }
+
+/* ── PROD FILTERS ── */
+.filter-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.filter-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+.pill {
+  padding: 5px 14px; border-radius: 99px; font-size: 12px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border); color: var(--text2);
+  background: var(--bg2); transition: all var(--transition); white-space: nowrap;
+}
+.pill:hover { border-color: var(--accent); color: var(--accent); }
+.pill.active { background: var(--accent); color: #0d0f14; border-color: var(--accent); }
+.filter-sep { width: 1px; height: 28px; background: var(--border); flex-shrink: 0; }
+.search-input {
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 7px 12px; font-size: 13px; color: var(--text); font-family: var(--font); outline: none;
+  transition: border-color var(--transition); min-width: 200px;
+}
+.search-input:focus { border-color: var(--accent); }
+.search-input::placeholder { color: var(--text3); }
+select.filter-select {
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 7px 12px; font-size: 12px; color: var(--text); font-family: var(--font);
+  cursor: pointer; outline: none; transition: border-color var(--transition);
+}
+select.filter-select:focus { border-color: var(--accent); }
+
+/* ── TABLE STICKY ── */
+.table-prod-wrap { overflow-x: auto; }
+.table-prod-wrap table { min-width: 900px; }
+.table-prod-wrap th:first-child,
+.table-prod-wrap td:first-child { position: sticky; left: 0; background: var(--bg2); z-index: 1; }
+.table-prod-wrap tr:hover td:first-child { background: var(--bg3); }
+td.total-col { color: var(--accent); font-weight: 700; }
+tfoot td { font-weight: 700; color: var(--text); border-top: 2px solid var(--border2); padding: 10px 14px; }
+.btn-icon { background: none; border: none; cursor: pointer; padding: 4px 7px; border-radius: 4px; font-size: 14px; transition: background var(--transition); }
+.btn-icon:hover { background: var(--bg4); }
+
+/* ── MODAL GLOBAL ── */
+#modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+  display: none; align-items: center; justify-content: center; z-index: 600;
+  backdrop-filter: blur(4px);
+}
+.modal-box {
+  background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+  width: 640px; max-width: 96vw; max-height: 92vh; overflow-y: auto;
+  box-shadow: var(--shadow); animation: loginIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
+}
+.modal-box.modal-lg { width: 800px; }
+#modal-header { padding: 18px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+#modal-header h3 { font-size: 15px; font-weight: 700; }
+.btn-close { background: none; border: none; color: var(--text3); cursor: pointer; font-size: 20px; line-height: 1; padding: 2px 6px; border-radius: 4px; transition: color var(--transition); }
+.btn-close:hover { color: var(--text); }
+#modal-body { padding: 22px; }
+
+/* ── STEPPER ── */
+.stepper { display: flex; gap: 0; margin-bottom: 28px; }
+.step-item { flex: 1; display: flex; flex-direction: column; align-items: center; position: relative; }
+.step-item:not(:last-child)::after { content: ''; position: absolute; top: 14px; left: 50%; right: -50%; height: 2px; background: var(--border); z-index: 0; }
+.step-item.done::after { background: var(--accent); }
+.step-num { width: 28px; height: 28px; border-radius: 50%; background: var(--bg4); border: 2px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: var(--text3); position: relative; z-index: 1; }
+.step-item.active .step-num { background: var(--accent); border-color: var(--accent); color: #0d0f14; }
+.step-item.done .step-num { background: var(--green); border-color: var(--green); color: #0d0f14; }
+.step-label { font-size: 10px; color: var(--text3); margin-top: 6px; text-align: center; font-weight: 600; letter-spacing: 0.06em; }
+.step-item.active .step-label { color: var(--accent); }
+.step-item.done .step-label { color: var(--green); }
+.step-pane { display: none; }
+.step-pane.active { display: block; }
+.step-nav { display: flex; justify-content: space-between; align-items: center; margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+
+/* ── APROVAÇÕES ── */
+.aprov-section { margin-bottom: 24px; }
+.aprov-section-header { padding: 14px 18px; background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0; display: flex; align-items: center; gap: 10px; }
+.aprov-section-header h3 { font-size: 14px; font-weight: 700; }
+.aprov-section-body { border: 1px solid var(--border); border-top: none; border-radius: 0 0 var(--radius) var(--radius); }
+.badge-count { background: var(--accent-dim); color: var(--accent); border-radius: 99px; padding: 1px 9px; font-size: 11px; font-weight: 700; }
+
+/* ── PARCELAS ── */
+.parcela-row { display: grid; grid-template-columns: auto 1fr 1fr; gap: 12px; align-items: end; padding: 10px 14px; background: var(--bg3); border-radius: var(--radius-sm); margin-bottom: 8px; }
+.toggle-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.toggle { position: relative; display: inline-block; width: 40px; height: 22px; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; inset: 0; background: var(--bg4); border-radius: 22px; transition: 0.3s; border: 1px solid var(--border); }
+.slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 2px; bottom: 2px; background: var(--text3); border-radius: 50%; transition: 0.3s; }
+input:checked + .slider { background: var(--accent-dim); border-color: var(--accent); }
+input:checked + .slider:before { transform: translateX(18px); background: var(--accent); }
+
+/* ── REVISAO ── */
+.revisao-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.revisao-item { background: var(--bg3); border-radius: var(--radius-sm); padding: 10px 14px; }
+.revisao-label { font-size: 10px; color: var(--text3); text-transform: uppercase; font-weight: 600; letter-spacing: 0.08em; margin-bottom: 4px; }
+.revisao-value { font-size: 13px; color: var(--text); font-weight: 500; }
 </style>
 </head>
 <body>
@@ -406,23 +498,41 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
   <!-- PRODUÇÃO -->
   <div id="tab-producao" class="tab-pane">
-    <div class="page-header">
-      <h1>Produção</h1>
-      <p>Planejamento e orçamento por cidade</p>
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <h1>Produção</h1>
+        <p>Planejamento e orçamento por cidade</p>
+      </div>
+      <div id="prod-btn-novo"></div>
     </div>
-    <div class="coming-soon"><div class="icon">🏗️</div><h2>Produção</h2><p>Em construção — próxima sessão</p></div>
+    <div id="prod-content">
+      <div class="loading-state"><div class="spinner"></div><span>Carregando...</span></div>
+    </div>
   </div>
 
   <!-- SOLICITAÇÕES -->
   <div id="tab-solicitacoes" class="tab-pane">
-    <div class="page-header"><h1>Solicitações</h1></div>
-    <div class="coming-soon"><div class="icon">📋</div><h2>Solicitações & Despesas</h2><p>Em construção — próxima sessão</p></div>
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <h1>Solicitações</h1>
+        <p>Solicite pagamentos e acompanhe o status</p>
+      </div>
+      <button class="btn btn-primary" onclick="abrirFormSolicitacao()" id="btn-nova-solic">+ Nova Solicitação</button>
+    </div>
+    <div id="solic-content">
+      <div class="loading-state"><div class="spinner"></div><span>Carregando...</span></div>
+    </div>
   </div>
 
   <!-- APROVAÇÕES -->
   <div id="tab-aprovacoes" class="tab-pane">
-    <div class="page-header"><h1>Aprovações</h1></div>
-    <div class="coming-soon"><div class="icon">✅</div><h2>Aprovações</h2><p>Em construção — próxima sessão</p></div>
+    <div class="page-header">
+      <h1>Aprovações</h1>
+      <p>Gerencie aprovações e confirmações de pagamento</p>
+    </div>
+    <div id="aprov-content">
+      <div class="loading-state"><div class="spinner"></div><span>Carregando...</span></div>
+    </div>
   </div>
 
   <!-- OPERACIONAL -->
@@ -466,6 +576,17 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 <!-- TOAST CONTAINER -->
 <div id="toastContainer"></div>
 
+<!-- MODAL GLOBAL -->
+<div id="modal" onclick="fecharModal(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div id="modal-header">
+      <h3 id="modal-titulo"></h3>
+      <button class="btn-close" onclick="fecharModal()">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
 <script>
 /* ══════════════════════════════════════════════════════════════
    BLOCO 1 — CONFIGURAÇÃO GLOBAL
@@ -477,6 +598,7 @@ const SHEET_GERAL = '1HHijJY80EdU47XhStyEKz5CH9kUPYOgmRDBtDSBxrYA';
 let USUARIO = null;     // objeto do usuário logado
 let CIDADES = [];       // array de { cidade, nome, idSheet, ativo }
 let CIDADE_ATIVA = '';  // cidade selecionada no topbar
+let USUARIOS = [];      // todos os usuários (carregado pós-login)
 
 /* ══════════════════════════════════════════════════════════════
    BLOCO 2 — CACHE DE SHEETS
@@ -771,6 +893,19 @@ function iniciarSistema() {
   // Sidebar
   renderSidebar();
 
+  // Carrega todos usuários em background
+  sheetsRead(SHEET_GERAL, 'Usuários!A:F', false).then(rows => {
+    if (!rows || rows.length < 2) return;
+    const h = rows[0];
+    USUARIOS = rows.slice(1).map(r => rowToObj(h, r)).filter(u => u.CÓDIGO).map(u => ({
+      codigo: u.CÓDIGO.trim(),
+      nome: u.NOME || u.CÓDIGO,
+      perfil: (u.PERFIL || '').toLowerCase(),
+      cidade: (u.CIDADE || '').toLowerCase().replace('—','').replace('–','').trim(),
+      whatsapp: u.WHATSAPP || '',
+    }));
+  }).catch(() => {});
+
   // Vai para dashboard
   showTab('dashboard');
 }
@@ -917,6 +1052,9 @@ function showTab(tabId) {
 
 function onTabChange(tabId) {
   if (tabId === 'dashboard') renderDashboard();
+  if (tabId === 'producao') iniciarProducao();
+  if (tabId === 'solicitacoes') iniciarSolicitacoes();
+  if (tabId === 'aprovacoes') iniciarAprovacoes();
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -1183,6 +1321,1135 @@ async function renderDashboard() {
 
 function renderDashEmpty(msg) {
   return `<div class="empty-state"><div class="icon">📭</div><p>${msg}</p></div>`;
+}
+
+/* ── HELPERS DE USUÁRIOS (usados nos Blocos 12-14) ── */
+function usuariosDaCidade(cidade) {
+  return USUARIOS.filter(u => u.perfil === 'prod' && u.cidade === cidade && u.whatsapp);
+}
+function usuarioPorCodigo(codigo) {
+  return USUARIOS.find(u => u.codigo === codigo);
+}
+function abrirModal(titulo, htmlBody, large = false) {
+  const box = document.querySelector('.modal-box');
+  if (large) box.classList.add('modal-lg'); else box.classList.remove('modal-lg');
+  document.getElementById('modal-titulo').textContent = titulo;
+  document.getElementById('modal-body').innerHTML = htmlBody;
+  document.getElementById('modal').style.display = 'flex';
+}
+function fecharModal(e) {
+  if (e && e.target !== document.getElementById('modal')) return;
+  document.getElementById('modal').style.display = 'none';
+  document.getElementById('modal-body').innerHTML = '';
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BLOCO 12 — PRODUÇÃO
+══════════════════════════════════════════════════════════════ */
+let prodCatFiltro = 'todas';
+let prodStatusFiltro = '';
+let prodBuscaTxt = '';
+let prodData = [];
+let _prodCidade = ''; // cidade quando prodData foi carregado
+
+const STATUS_PROD = [
+  'Pendente','Orçado','Pagamento solicitado','Pagamento aprovado',
+  'Solicitado a MeuBilhete','Pago parcial','Pago','Item cancelado'
+];
+
+function podEditarProd() {
+  return USUARIO.perfil === 'mestre' || USUARIO.perfil === 'prod';
+}
+
+async function iniciarProducao() {
+  // Se cidade mudou, reconstrói tudo; senão, só re-renderiza tabela
+  if (_prodCidade !== CIDADE_ATIVA) {
+    _prodCidade = CIDADE_ATIVA;
+    prodCatFiltro = 'todas';
+    prodStatusFiltro = '';
+    prodBuscaTxt = '';
+    prodData = [];
+    renderProducaoShell();
+    await carregarDadosProd();
+  } else {
+    renderProdTabela();
+  }
+}
+
+function renderProducaoShell() {
+  const c = document.getElementById('prod-content');
+  const btnNovo = document.getElementById('prod-btn-novo');
+  btnNovo.innerHTML = podEditarProd()
+    ? `<button class="btn btn-primary" onclick="abrirModalProd()">+ Novo Item</button>`
+    : '';
+  c.innerHTML = `
+    <div class="section-block">
+      <div class="section-block-header" style="flex-wrap:wrap;gap:12px">
+        <div class="filter-bar" id="prod-filter-bar" style="margin:0;flex:1">
+          <div class="filter-pills" id="prod-pills">
+            <div class="pill active" onclick="setProdCat('todas')">Todas</div>
+          </div>
+          <div class="filter-sep"></div>
+          <select class="filter-select" id="prod-status-sel" onchange="setProdStatus(this.value)">
+            <option value="">Todos os status</option>
+            ${STATUS_PROD.map(s => `<option value="${s}">${s}</option>`).join('')}
+          </select>
+          <input class="search-input" id="prod-busca" placeholder="Buscar item, fornecedor..." oninput="setProdBusca(this.value)" value="">
+        </div>
+      </div>
+      <div class="table-prod-wrap" id="prod-tabela-wrap">
+        <div class="loading-state"><div class="spinner"></div><span>Carregando produção...</span></div>
+      </div>
+    </div>
+  `;
+}
+
+async function carregarDadosProd() {
+  const sheetId = cidadeSheet(CIDADE_ATIVA);
+  if (!sheetId) {
+    document.getElementById('prod-tabela-wrap').innerHTML =
+      `<div class="empty-state"><div class="icon">⚠️</div><p>Planilha não configurada para esta cidade.</p></div>`;
+    return;
+  }
+  try {
+    // força leitura sem cache para cidade atual
+    cacheInvalidate(`${sheetId}::Produção!A:N`);
+    const rows = await sheetsRead(sheetId, 'Produção!A:N', true);
+    if (!rows || rows.length < 2) {
+      prodData = [];
+      renderProdTabela();
+      return;
+    }
+    const header = rows[0];
+    prodData = rows.slice(1).map((row, i) => {
+      const obj = rowToObj(header, row);
+      obj._rowIndex = i + 2;
+      return obj;
+    }).filter(r => r.CATEGORIA && r.CATEGORIA !== 'CATEGORIA');
+    renderProdPills();
+    renderProdTabela();
+  } catch (e) {
+    document.getElementById('prod-tabela-wrap').innerHTML =
+      `<div class="empty-state"><div class="icon">⚠️</div><p style="color:var(--red)">${e.message}</p></div>`;
+  }
+}
+
+function renderProdPills() {
+  const cats = ['todas', ...new Set(prodData.map(r => r.CATEGORIA).filter(Boolean))];
+  const el = document.getElementById('prod-pills');
+  if (!el) return;
+  el.innerHTML = cats.map(cat =>
+    `<div class="pill ${cat === prodCatFiltro ? 'active' : ''}" onclick="setProdCat('${cat.replace(/'/g,"\\'")}')">
+      ${cat === 'todas' ? 'Todas' : cat}
+    </div>`
+  ).join('');
+}
+
+function setProdCat(cat) {
+  prodCatFiltro = cat;
+  renderProdPills();
+  renderProdTabela();
+}
+function setProdStatus(val) { prodStatusFiltro = val; renderProdTabela(); }
+function setProdBusca(val) { prodBuscaTxt = val.toLowerCase(); renderProdTabela(); }
+
+function renderProdTabela() {
+  const wrap = document.getElementById('prod-tabela-wrap');
+  if (!wrap) return;
+
+  let dados = prodData;
+  if (prodCatFiltro !== 'todas') dados = dados.filter(r => r.CATEGORIA === prodCatFiltro);
+  if (prodStatusFiltro) dados = dados.filter(r => r['STATUS'] === prodStatusFiltro);
+  if (prodBuscaTxt) dados = dados.filter(r =>
+    (r.ITEM||'').toLowerCase().includes(prodBuscaTxt) ||
+    (r.FORNECEDOR||'').toLowerCase().includes(prodBuscaTxt) ||
+    (r.OBS||'').toLowerCase().includes(prodBuscaTxt)
+  );
+
+  if (dados.length === 0) {
+    wrap.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>Nenhum item encontrado.</p></div>`;
+    return;
+  }
+
+  // Totais do rodapé
+  let totOrc = 0, totPago = 0, totCusto25 = 0;
+  dados.forEach(r => {
+    totOrc   += parseBRL(r['TOTAL 2026 (R$)'] || r['TOTAL26'] || 0);
+    totPago  += parseBRL(r['VALOR PAGO (R$)'] || r['PAGO'] || 0);
+    totCusto25 += parseBRL(r['CUSTO 2025 (R$)'] || r['CUSTO25'] || 0);
+  });
+
+  const canEdit = podEditarProd();
+
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Categoria</th>
+          <th>Subcategoria</th>
+          <th>Qnt</th>
+          <th>Dias</th>
+          <th>Data Início</th>
+          <th>Valor Unit</th>
+          <th>2025 (ref)</th>
+          <th style="color:var(--accent)">Total 2026</th>
+          <th>Diferença</th>
+          <th>Valor Pago</th>
+          <th>Status</th>
+          <th>Fornecedor</th>
+          ${canEdit ? '<th></th>' : ''}
+        </tr>
+      </thead>
+      <tbody>
+        ${dados.map(r => {
+          const tot26 = parseBRL(r['TOTAL 2026 (R$)'] || 0);
+          const pago  = parseBRL(r['VALOR PAGO (R$)'] || 0);
+          const c25   = parseBRL(r['CUSTO 2025 (R$)'] || 0);
+          const diff  = parseBRL(r['DIFERENÇA (R$)'] || 0);
+          const st    = r['STATUS'] || '';
+          return `
+          <tr>
+            <td class="text-main">${r.ITEM || '—'}</td>
+            <td>${r.CATEGORIA || '—'}</td>
+            <td>${r.SUBCATEGORIA || '—'}</td>
+            <td>${r['QNT'] || '—'}</td>
+            <td>${r['DIAS'] || '—'}</td>
+            <td>${normalizarData(r['DATA INÍCIO'] || '')}</td>
+            <td>${formatBRL(parseBRL(r['VALOR UNIT (R$)'] || 0))}</td>
+            <td style="color:var(--text3)">${formatBRL(c25)}</td>
+            <td class="total-col">${formatBRL(tot26)}</td>
+            <td style="color:${diff >= 0 ? 'var(--red)' : 'var(--green)'}">${formatBRL(diff)}</td>
+            <td style="color:var(--green)">${formatBRL(pago)}</td>
+            <td><span class="badge ${badgeProdStatus(st)}">${st || '—'}</span></td>
+            <td>${r['FORNECEDOR'] || '—'}</td>
+            ${canEdit ? `<td><button class="btn-icon" title="Editar" onclick='abrirModalProd(${r._rowIndex})'>✏️</button></td>` : ''}
+          </tr>`;
+        }).join('')}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td colspan="7">Totais (${dados.length} itens)</td>
+          <td>${formatBRL(totCusto25)}</td>
+          <td class="total-col">${formatBRL(totOrc)}</td>
+          <td></td>
+          <td style="color:var(--green)">${formatBRL(totPago)}</td>
+          <td colspan="${canEdit ? 3 : 2}"></td>
+        </tr>
+      </tfoot>
+    </table>
+  `;
+}
+
+function badgeProdStatus(st) {
+  if (st === 'Pago') return 'badge-green';
+  if (st === 'Pago parcial') return 'badge-green';
+  if (st === 'Pagamento aprovado' || st === 'Pagamento solicitado' || st === 'Solicitado a MeuBilhete') return 'badge-blue';
+  if (st === 'Orçado') return 'badge-accent';
+  if (st === 'Item cancelado') return 'badge-red';
+  return 'badge-gray';
+}
+
+function abrirModalProd(rowIndex) {
+  // rowIndex = número da linha no Sheet (base 2) ou undefined = novo item
+  const isEdicao = typeof rowIndex === 'number';
+  let item = {};
+  if (isEdicao) item = prodData.find(r => r._rowIndex === rowIndex) || {};
+
+  const cats = [...new Set(prodData.map(r => r.CATEGORIA).filter(Boolean))];
+
+  const html = `
+    <div class="form-row col2">
+      <div class="form-group">
+        <label>Categoria</label>
+        <input class="form-control" id="pf-cat" list="pf-cats-dl" value="${item.CATEGORIA||''}" placeholder="ex: Som e Luz">
+        <datalist id="pf-cats-dl">${cats.map(c => `<option value="${c}">`).join('')}</datalist>
+      </div>
+      <div class="form-group">
+        <label>Subcategoria</label>
+        <input class="form-control" id="pf-subcat" value="${item.SUBCATEGORIA||''}" placeholder="opcional">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Item *</label>
+        <input class="form-control" id="pf-item" value="${item.ITEM||''}" placeholder="Descrição do item">
+      </div>
+    </div>
+    <div class="form-row col3">
+      <div class="form-group">
+        <label>Quantidade</label>
+        <input class="form-control" id="pf-qnt" type="number" min="0" value="${item['QNT']||1}" oninput="calcTotalProd()">
+      </div>
+      <div class="form-group">
+        <label>Dias</label>
+        <input class="form-control" id="pf-dias" type="number" min="0" value="${item['DIAS']||1}" oninput="calcTotalProd()">
+      </div>
+      <div class="form-group">
+        <label>Data Início</label>
+        <input class="form-control" id="pf-dtinicio" type="date" value="${isoToInput(normalizarData(item['DATA INÍCIO']||''))}">
+      </div>
+    </div>
+    <div class="form-row col2">
+      <div class="form-group">
+        <label>Valor Unitário (R$)</label>
+        <input class="form-control" id="pf-unit" type="number" min="0" step="0.01" value="${parseBRL(item['VALOR UNIT (R$)']||0).toFixed(2)}" oninput="calcTotalProd()">
+      </div>
+      <div class="form-group">
+        <label>Custo 2025 (R$)</label>
+        <input class="form-control" id="pf-custo25" type="number" min="0" step="0.01" value="${parseBRL(item['CUSTO 2025 (R$)']||0).toFixed(2)}" oninput="calcTotalProd()">
+      </div>
+    </div>
+    <div class="form-row col2" style="background:var(--bg3);border-radius:var(--radius-sm);padding:12px;margin-bottom:16px">
+      <div class="form-group">
+        <label>Total 2026 (auto)</label>
+        <input class="form-control" id="pf-total26" readonly style="color:var(--accent);font-weight:700" value="">
+      </div>
+      <div class="form-group">
+        <label>Diferença (auto)</label>
+        <input class="form-control" id="pf-diff" readonly value="">
+      </div>
+    </div>
+    <div class="form-row col2">
+      <div class="form-group">
+        <label>Fornecedor</label>
+        <input class="form-control" id="pf-forn" value="${item['FORNECEDOR']||''}" placeholder="Nome do fornecedor">
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select class="form-control" id="pf-status">
+          ${STATUS_PROD.map(s => `<option value="${s}" ${(item['STATUS']||'Pendente')===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Observações</label>
+        <textarea class="form-control" id="pf-obs" rows="2">${item['OBS']||''}</textarea>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--border)">
+      <button class="btn btn-secondary" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-primary" id="pf-btn-salvar" onclick="salvarItemProd(${isEdicao ? rowIndex : 'null'})">
+        ${isEdicao ? 'Salvar Alterações' : 'Adicionar Item'}
+      </button>
+    </div>
+  `;
+  abrirModal(isEdicao ? 'Editar Item de Produção' : 'Novo Item de Produção', html, true);
+  calcTotalProd();
+}
+
+function calcTotalProd() {
+  const qnt  = parseFloat(document.getElementById('pf-qnt')?.value  || 0) || 0;
+  const dias  = parseFloat(document.getElementById('pf-dias')?.value || 0) || 0;
+  const unit  = parseFloat(document.getElementById('pf-unit')?.value || 0) || 0;
+  const c25   = parseFloat(document.getElementById('pf-custo25')?.value || 0) || 0;
+  const tot   = qnt * dias * unit;
+  const diff  = tot - c25;
+  const t26el = document.getElementById('pf-total26');
+  const dEl   = document.getElementById('pf-diff');
+  if (t26el) t26el.value = formatBRL(tot);
+  if (dEl) { dEl.value = formatBRL(diff); dEl.style.color = diff >= 0 ? 'var(--red)' : 'var(--green)'; }
+}
+
+async function salvarItemProd(rowIndex) {
+  const sheetId = cidadeSheet(CIDADE_ATIVA);
+  if (!sheetId) { showToast('Planilha não encontrada.', 'error'); return; }
+
+  const cat     = document.getElementById('pf-cat').value.trim();
+  const item    = document.getElementById('pf-item').value.trim();
+  const status  = document.getElementById('pf-status').value;
+
+  if (!cat || !item) { showToast('Preencha Categoria e Item.', 'warn'); return; }
+
+  const qnt  = parseFloat(document.getElementById('pf-qnt').value)||0;
+  const dias  = parseFloat(document.getElementById('pf-dias').value)||0;
+  const unit  = parseFloat(document.getElementById('pf-unit').value)||0;
+  const c25   = parseFloat(document.getElementById('pf-custo25').value)||0;
+  const tot   = qnt * dias * unit;
+  const diff  = tot - c25;
+  const dtIni = formatDateBR(document.getElementById('pf-dtinicio').value);
+  const forn  = document.getElementById('pf-forn').value.trim();
+  const obs   = document.getElementById('pf-obs').value.trim();
+  const subcat = document.getElementById('pf-subcat').value.trim();
+
+  // Valor pago: mantém o existente se for edição
+  let valPago = 0;
+  if (rowIndex) {
+    const existing = prodData.find(r => r._rowIndex === rowIndex);
+    if (existing) valPago = parseBRL(existing['VALOR PAGO (R$)'] || 0);
+  }
+
+  // Ordem das 14 colunas A:N
+  // A=CAT B=ITEM C=QNT D=DIAS E=DT_INI F=UNIT G=C25 H=TOT26 I=DIFF J=PAGO K=STATUS L=FORN M=OBS N=SUBCAT
+  const row = [cat, item, qnt, dias, dtIni, unit, c25, tot, diff, valPago, status, forn, obs, subcat];
+
+  const btn = document.getElementById('pf-btn-salvar');
+  await btnRun(btn, async () => {
+    try {
+      if (rowIndex) {
+        // Edição — registra no histórico
+        const anterior = prodData.find(r => r._rowIndex === rowIndex);
+        const totAnterior = parseBRL(anterior?.['TOTAL 2026 (R$)'] || 0);
+        const variacao = totAnterior > 0 ? ((tot - totAnterior) / totAnterior * 100).toFixed(1) : '—';
+
+        await sheetsWrite(sheetId, `Produção!A${rowIndex}:N${rowIndex}`, [row]);
+
+        // Grava no Alertas & Histórico
+        const histRow = [agora(), USUARIO.nome, item, cidadeNome(CIDADE_ATIVA),
+          formatBRL(totAnterior), formatBRL(tot), `${variacao}%`, 'Edição Produção', obs];
+        sheetsAppend(SHEET_GERAL, 'Alertas & Histórico!A:I', [histRow]).catch(() => {});
+      } else {
+        await sheetsAppend(sheetId, 'Produção!A:N', [row]);
+      }
+      cacheInvalidate(`${sheetId}::Produção!A:N`);
+      fecharModal();
+      showToast(rowIndex ? 'Item atualizado!' : 'Item adicionado!', 'success');
+      // Recarrega
+      await carregarDadosProd();
+    } catch (e) {
+      showToast(`Erro: ${e.message}`, 'error');
+    }
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BLOCO 13 — SOLICITAÇÕES
+══════════════════════════════════════════════════════════════ */
+let solicData = [];   // solicitações carregadas
+let _solicCidade = '';
+let solicFiltroSt = '';
+let solicFiltroCid = '';
+
+// Etapas do formulário
+let _solicEtapa = 1;
+let _solicForm = {};   // dados acumulados entre etapas
+let _solicParcelas = []; // [{venc:'', valor:0}]
+let _solicParcelado = false;
+
+async function iniciarSolicitacoes() {
+  await carregarSolicitacoes();
+}
+
+async function carregarSolicitacoes() {
+  const content = document.getElementById('solic-content');
+  content.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>Carregando solicitações...</span></div>`;
+  try {
+    const rows = await sheetsRead(SHEET_GERAL, 'Solicitações!A:V');
+    if (!rows || rows.length < 2) { solicData = []; } else {
+      const h = rows[0];
+      solicData = rows.slice(1).map((r, i) => {
+        const obj = rowToObj(h, r);
+        obj._rowIndex = i + 2;
+        return obj;
+      }).filter(r => r.DATA || r.ITEM);
+    }
+    renderSolicTabela(content);
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><p style="color:var(--red)">${e.message}</p></div>`;
+  }
+}
+
+function renderSolicTabela(content) {
+  const p = USUARIO.perfil;
+  const cids = cidadesVisiveis();
+
+  // Filtra por perfil
+  let dados = solicData;
+  if (p === 'prod') dados = dados.filter(r => (r.CIDADE||'').toLowerCase() === CIDADE_ATIVA);
+  if (p === 'socio') dados = dados.filter(r => r.SOLICITANTE === USUARIO.nome);
+
+  // Filtros ativos
+  if (solicFiltroSt) dados = dados.filter(r => r.STATUS === solicFiltroSt);
+  if (solicFiltroCid) dados = dados.filter(r => (r.CIDADE||'').toLowerCase() === solicFiltroCid);
+
+  const statusList = ['Em aberto','Pagamento aprovado','Solicitado a MeuBilhete','Pago parcial','Pago','Rejeitado'];
+  const mostrarCidFiltro = (p === 'mestre' || p === 'fin' || p === 'socio');
+
+  content.innerHTML = `
+    <div class="section-block">
+      <div class="section-block-header" style="flex-wrap:wrap;gap:10px">
+        <h3>Histórico de Solicitações</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          ${mostrarCidFiltro ? `
+            <select class="filter-select" onchange="setSolicFiltro('cid',this.value)">
+              <option value="">Todas as cidades</option>
+              ${cids.map(c => `<option value="${c.cidade}" ${solicFiltroCid===c.cidade?'selected':''}>${c.nome}</option>`).join('')}
+            </select>` : ''}
+          <select class="filter-select" onchange="setSolicFiltro('st',this.value)">
+            <option value="">Todos os status</option>
+            ${statusList.map(s => `<option value="${s}" ${solicFiltroSt===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      ${dados.length === 0
+        ? `<div class="empty-state"><div class="icon">📭</div><p>Nenhuma solicitação encontrada.</p></div>`
+        : `<div class="table-wrap"><table>
+            <thead><tr>
+              <th>Data</th><th>Cidade</th><th>Solicitante</th><th>Item</th>
+              <th>Valor</th><th>Parcela</th><th>Status</th>
+            </tr></thead>
+            <tbody>
+              ${dados.map(r => `
+                <tr>
+                  <td>${r.DATA||'—'}</td>
+                  <td>${r.CIDADE||'—'}</td>
+                  <td>${r.SOLICITANTE||'—'}</td>
+                  <td class="text-main">${r.ITEM||'—'}</td>
+                  <td>${formatBRL(parseBRL(r['VALOR SOLICITADO (R$)']||0))}</td>
+                  <td>${r.PARCELAS||'à vista'}</td>
+                  <td><span class="badge ${badgeSolicStatus(r.STATUS)}">${r.STATUS||'—'}</span></td>
+                </tr>`).join('')}
+            </tbody>
+          </table></div>`
+      }
+    </div>
+  `;
+}
+
+function setSolicFiltro(tipo, val) {
+  if (tipo === 'st') solicFiltroSt = val;
+  if (tipo === 'cid') solicFiltroCid = val;
+  renderSolicTabela(document.getElementById('solic-content'));
+}
+
+function badgeSolicStatus(st) {
+  if (st === 'Pago') return 'badge-green';
+  if (st === 'Pago parcial') return 'badge-green';
+  if (st === 'Rejeitado') return 'badge-red';
+  if (st === 'Pagamento aprovado' || st === 'Solicitado a MeuBilhete') return 'badge-blue';
+  if (st === 'Em aberto') return 'badge-accent';
+  return 'badge-gray';
+}
+
+function abrirFormSolicitacao() {
+  _solicEtapa = 1;
+  _solicForm = {};
+  _solicParcelas = [{ venc: '', valor: '' }];
+  _solicParcelado = false;
+  renderSolicModal();
+}
+
+function renderSolicModal() {
+  const p = USUARIO.perfil;
+  const cids = cidadesVisiveis();
+  const cidDefault = (p === 'prod') ? CIDADE_ATIVA : (cids[0]?.cidade || '');
+
+  abrirModal('Nova Solicitação de Pagamento', `
+    <div class="stepper" id="solic-stepper">
+      ${['Identificação','Financeiro','Parcelas','Revisão'].map((l,i) => {
+        const n = i+1;
+        const cls = n < _solicEtapa ? 'done' : n === _solicEtapa ? 'active' : '';
+        return `<div class="step-item ${cls}">
+          <div class="step-num">${n < _solicEtapa ? '✓' : n}</div>
+          <div class="step-label">${l}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div id="solic-step-body">${renderSolicStep()}</div>
+  `, true);
+}
+
+function renderSolicStep() {
+  if (_solicEtapa === 1) return renderSolicStep1();
+  if (_solicEtapa === 2) return renderSolicStep2();
+  if (_solicEtapa === 3) return renderSolicStep3();
+  return renderSolicStep4();
+}
+
+function renderSolicStep1() {
+  const p = USUARIO.perfil;
+  const cids = cidadesVisiveis();
+  const f = _solicForm;
+  return `
+    <div class="step-pane active">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Cidade *</label>
+          ${p === 'prod'
+            ? `<input class="form-control" readonly value="${cidadeNome(CIDADE_ATIVA)}">`
+            : `<select class="form-control" id="sf-cidade">
+                ${cids.map(c => `<option value="${c.cidade}" ${(f.cidade||cids[0]?.cidade)===c.cidade?'selected':''}>${c.nome}</option>`).join('')}
+              </select>`}
+        </div>
+      </div>
+      <div class="form-row col2">
+        <div class="form-group">
+          <label>Categoria *</label>
+          <input class="form-control" id="sf-cat" value="${f.categoria||''}" placeholder="ex: Som e Luz">
+        </div>
+        <div class="form-group">
+          <label>Item *</label>
+          <input class="form-control" id="sf-item" value="${f.item||''}" placeholder="Nome do item">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Descrição / Justificativa *</label>
+          <textarea class="form-control" id="sf-desc" rows="3">${f.descricao||''}</textarea>
+        </div>
+      </div>
+      <div class="step-nav">
+        <span></span>
+        <button class="btn btn-primary" onclick="solicProximo(1)">Próximo →</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderSolicStep2() {
+  const f = _solicForm;
+  return `
+    <div class="step-pane active">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Favorecido *</label>
+          <input class="form-control" id="sf-fav" value="${f.favorecido||''}" placeholder="Nome completo ou razão social">
+        </div>
+      </div>
+      <div class="form-row col3">
+        <div class="form-group">
+          <label>Banco</label>
+          <input class="form-control" id="sf-banco" value="${f.banco||''}" placeholder="ex: Nubank">
+        </div>
+        <div class="form-group">
+          <label>Agência</label>
+          <input class="form-control" id="sf-agencia" value="${f.agencia||''}" placeholder="0001">
+        </div>
+        <div class="form-group">
+          <label>Conta</label>
+          <input class="form-control" id="sf-conta" value="${f.conta||''}" placeholder="12345-6">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>PIX</label>
+          <input class="form-control" id="sf-pix" value="${f.pix||''}" placeholder="CPF, CNPJ, email ou telefone">
+        </div>
+      </div>
+      <div class="form-row col2">
+        <div class="form-group">
+          <label>Valor Solicitado (R$) *</label>
+          <input class="form-control" id="sf-valor" type="number" min="0" step="0.01" value="${f.valor||''}">
+        </div>
+        <div class="form-group">
+          <label>Custo 2026 — referência (R$)</label>
+          <input class="form-control" id="sf-custo26" readonly value="${f.custo26||''}" placeholder="Preenchido auto se item localizado">
+        </div>
+      </div>
+      <div class="step-nav">
+        <button class="btn btn-secondary" onclick="solicVoltar(2)">← Voltar</button>
+        <button class="btn btn-primary" onclick="solicProximo(2)">Próximo →</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderSolicStep3() {
+  return `
+    <div class="step-pane active">
+      <div class="toggle-row">
+        <label class="toggle">
+          <input type="checkbox" id="sf-parcelado" ${_solicParcelado?'checked':''} onchange="toggleParcelado(this.checked)">
+          <span class="slider"></span>
+        </label>
+        <span style="font-size:13px;font-weight:600">Parcelado</span>
+        <span style="font-size:12px;color:var(--text3)">${_solicParcelado ? 'Distribuir em parcelas' : 'Pagamento à vista'}</span>
+      </div>
+      <div id="sf-parcelas-wrap">
+        ${renderParcelasUI()}
+      </div>
+      <div class="step-nav">
+        <button class="btn btn-secondary" onclick="solicVoltar(3)">← Voltar</button>
+        <button class="btn btn-primary" onclick="solicProximo(3)">Revisar →</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderParcelasUI() {
+  if (!_solicParcelado) {
+    const p0 = _solicParcelas[0] || { venc: '', valor: '' };
+    return `
+      <div class="form-row col2">
+        <div class="form-group">
+          <label>Data de Vencimento</label>
+          <input class="form-control" id="sf-parc-0-venc" type="date" value="${p0.venc||''}">
+        </div>
+        <div class="form-group">
+          <label>Valor (R$)</label>
+          <input class="form-control" id="sf-parc-0-valor" type="number" step="0.01" min="0" value="${p0.valor||''}">
+        </div>
+      </div>
+    `;
+  }
+  return `
+    <div id="sf-parcelas-list">
+      ${_solicParcelas.map((p, i) => `
+        <div class="parcela-row">
+          <span style="font-weight:700;color:var(--text3);font-size:12px">${i+1}ª</span>
+          <div class="form-group">
+            <label>Vencimento</label>
+            <input class="form-control" id="sf-parc-${i}-venc" type="date" value="${p.venc||''}">
+          </div>
+          <div class="form-group">
+            <label>Valor (R$)</label>
+            <input class="form-control" id="sf-parc-${i}-valor" type="number" step="0.01" min="0" value="${p.valor||''}">
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn btn-secondary btn-sm" onclick="addParcela()">+ Parcela</button>
+      ${_solicParcelas.length > 1 ? `<button class="btn btn-danger btn-sm" onclick="removeParcela()">− Remover</button>` : ''}
+    </div>
+  `;
+}
+
+function toggleParcelado(checked) {
+  // Salva dados atuais antes de re-renderizar
+  salvaParcelas();
+  _solicParcelado = checked;
+  if (!_solicParcelado && _solicParcelas.length > 1) _solicParcelas = [_solicParcelas[0]];
+  document.getElementById('sf-parcelas-wrap').innerHTML = renderParcelasUI();
+}
+
+function addParcela() {
+  salvaParcelas();
+  _solicParcelas.push({ venc: '', valor: '' });
+  document.getElementById('sf-parcelas-wrap').innerHTML = renderParcelasUI();
+}
+function removeParcela() {
+  salvaParcelas();
+  if (_solicParcelas.length > 1) _solicParcelas.pop();
+  document.getElementById('sf-parcelas-wrap').innerHTML = renderParcelasUI();
+}
+
+function salvaParcelas() {
+  _solicParcelas = _solicParcelas.map((_, i) => ({
+    venc: document.getElementById(`sf-parc-${i}-venc`)?.value || '',
+    valor: document.getElementById(`sf-parc-${i}-valor`)?.value || '',
+  }));
+}
+
+function renderSolicStep4() {
+  const f = _solicForm;
+  const cid = cidadeNome(f.cidade || CIDADE_ATIVA);
+  const total = _solicParcelas.reduce((s, p) => s + (parseFloat(p.valor)||0), 0);
+  return `
+    <div class="step-pane active">
+      <p style="font-size:13px;color:var(--text3);margin-bottom:16px">Revise os dados antes de enviar.</p>
+      <div class="revisao-grid">
+        <div class="revisao-item"><div class="revisao-label">Cidade</div><div class="revisao-value">${cid}</div></div>
+        <div class="revisao-item"><div class="revisao-label">Categoria</div><div class="revisao-value">${f.categoria||'—'}</div></div>
+        <div class="revisao-item"><div class="revisao-label">Item</div><div class="revisao-value">${f.item||'—'}</div></div>
+        <div class="revisao-item"><div class="revisao-label">Favorecido</div><div class="revisao-value">${f.favorecido||'—'}</div></div>
+        <div class="revisao-item"><div class="revisao-label">Valor Solicitado</div><div class="revisao-value" style="color:var(--accent);font-weight:700">${formatBRL(parseFloat(f.valor)||0)}</div></div>
+        <div class="revisao-item"><div class="revisao-label">Pagamento</div><div class="revisao-value">${_solicParcelado ? `${_solicParcelas.length}x parcelado` : 'À vista'}</div></div>
+        ${f.pix ? `<div class="revisao-item"><div class="revisao-label">PIX</div><div class="revisao-value">${f.pix}</div></div>` : ''}
+        ${f.banco ? `<div class="revisao-item"><div class="revisao-label">Banco</div><div class="revisao-value">${f.banco} · Ag ${f.agencia} · Cc ${f.conta}</div></div>` : ''}
+      </div>
+      ${_solicParcelas.length > 0 ? `
+        <div style="margin-top:16px;font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">Parcelas</div>
+        ${_solicParcelas.map((p, i) => `
+          <div style="display:flex;justify-content:space-between;padding:8px 12px;background:var(--bg3);border-radius:var(--radius-sm);margin-bottom:6px">
+            <span style="font-size:13px">${_solicParcelado ? `${i+1}ª parcela` : 'À vista'} · ${formatDateBR(p.venc)||'—'}</span>
+            <span style="font-weight:700;color:var(--accent)">${formatBRL(parseFloat(p.valor)||0)}</span>
+          </div>
+        `).join('')}
+        <div style="text-align:right;font-size:13px;font-weight:700;color:var(--text);padding:8px 12px">Total: ${formatBRL(total)}</div>
+      ` : ''}
+      <div class="form-row" style="margin-top:16px">
+        <div class="form-group">
+          <label>Observação (opcional)</label>
+          <textarea class="form-control" id="sf-obs" rows="2">${f.obs||''}</textarea>
+        </div>
+      </div>
+      <div class="step-nav">
+        <button class="btn btn-secondary" onclick="solicVoltar(4)">← Voltar</button>
+        <button class="btn btn-primary" id="sf-btn-enviar" onclick="enviarSolicitacao()">📤 Enviar Solicitação</button>
+      </div>
+    </div>
+  `;
+}
+
+function solicProximo(etapaAtual) {
+  // Coleta dados da etapa e avança
+  if (etapaAtual === 1) {
+    const p = USUARIO.perfil;
+    const cidade = p === 'prod' ? CIDADE_ATIVA : (document.getElementById('sf-cidade')?.value || '');
+    const cat = document.getElementById('sf-cat')?.value.trim();
+    const item = document.getElementById('sf-item')?.value.trim();
+    const desc = document.getElementById('sf-desc')?.value.trim();
+    if (!cidade || !cat || !item || !desc) { showToast('Preencha todos os campos obrigatórios.', 'warn'); return; }
+    _solicForm.cidade = cidade;
+    _solicForm.categoria = cat;
+    _solicForm.item = item;
+    _solicForm.descricao = desc;
+
+    // Tenta localizar referência de custo na Produção
+    const sheetId = cidadeSheet(cidade);
+    if (sheetId) {
+      const ref = prodData.find(r => r.ITEM && r.ITEM.toLowerCase().includes(item.toLowerCase()));
+      _solicForm.custo26 = ref ? parseBRL(ref['TOTAL 2026 (R$)']||0).toFixed(2) : '';
+    }
+  } else if (etapaAtual === 2) {
+    const fav = document.getElementById('sf-fav')?.value.trim();
+    const valor = document.getElementById('sf-valor')?.value;
+    if (!fav || !valor) { showToast('Preencha Favorecido e Valor.', 'warn'); return; }
+    _solicForm.favorecido = fav;
+    _solicForm.banco = document.getElementById('sf-banco')?.value.trim();
+    _solicForm.agencia = document.getElementById('sf-agencia')?.value.trim();
+    _solicForm.conta = document.getElementById('sf-conta')?.value.trim();
+    _solicForm.pix = document.getElementById('sf-pix')?.value.trim();
+    _solicForm.valor = valor;
+    _solicForm.custo26 = document.getElementById('sf-custo26')?.value || '';
+  } else if (etapaAtual === 3) {
+    salvaParcelas();
+    if (_solicParcelas.some(p => !p.venc)) { showToast('Informe a data de vencimento de todas as parcelas.', 'warn'); return; }
+  }
+  _solicEtapa = etapaAtual + 1;
+  atualizarSolicModal();
+}
+
+function solicVoltar(etapaAtual) {
+  if (etapaAtual === 4) {
+    _solicForm.obs = document.getElementById('sf-obs')?.value.trim() || '';
+  }
+  _solicEtapa = etapaAtual - 1;
+  atualizarSolicModal();
+}
+
+function atualizarSolicModal() {
+  // Atualiza stepper
+  document.getElementById('solic-stepper').innerHTML = ['Identificação','Financeiro','Parcelas','Revisão'].map((l,i) => {
+    const n = i+1;
+    const cls = n < _solicEtapa ? 'done' : n === _solicEtapa ? 'active' : '';
+    return `<div class="step-item ${cls}">
+      <div class="step-num">${n < _solicEtapa ? '✓' : n}</div>
+      <div class="step-label">${l}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('solic-step-body').innerHTML = renderSolicStep();
+}
+
+async function enviarSolicitacao() {
+  _solicForm.obs = document.getElementById('sf-obs')?.value.trim() || '';
+  const f = _solicForm;
+  const btn = document.getElementById('sf-btn-enviar');
+  await btnRun(btn, async () => {
+    try {
+      const cidade = f.cidade || CIDADE_ATIVA;
+      const nomeCidade = cidadeNome(cidade);
+      const n = _solicParcelas.length;
+
+      // Monta linhas (uma por parcela)
+      const linhas = _solicParcelas.map((p, i) => {
+        const parcelaLabel = _solicParcelado ? `${n}x Parcela ${i+1}/${n}` : 'à vista';
+        return [
+          dataHoje(),            // A DATA
+          nomeCidade,            // B CIDADE
+          USUARIO.nome,          // C SOLICITANTE
+          USUARIO.whatsapp,      // D WHATSAPP
+          f.categoria,           // E CATEGORIA
+          f.item,                // F ITEM
+          f.descricao,           // G DESCRIÇÃO
+          f.favorecido,          // H FAVORECIDO
+          f.banco || '',         // I BANCO
+          f.agencia || '',       // J AGÊNCIA
+          f.conta || '',         // K CONTA
+          f.pix || '',           // L PIX
+          parseFloat(f.valor)||0,// M VALOR SOLICITADO
+          parseFloat(f.custo26)||0, // N CUSTO 2026
+          parcelaLabel,          // O PARCELAS
+          'Em aberto',           // P STATUS
+          '', '',                // Q APROVADO POR / R DATA APROVAÇÃO
+          '', '', '',            // S PAGO POR / T DATA PAGAMENTO / U VALOR PAGO
+          f.obs || '',           // V OBS
+        ];
+      });
+
+      await sheetsAppend(SHEET_GERAL, 'Solicitações!A:V', linhas);
+      cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:V`);
+
+      // WhatsApp → FIN001
+      const fin001 = usuarioPorCodigo('FIN001');
+      if (fin001?.whatsapp) {
+        sendWhatsApp(fin001.whatsapp,
+          `🔔 Nova solicitação de ${nomeCidade}: ${f.item} — ${formatBRL(parseFloat(f.valor)||0)}. Acesse o sistema para aprovar.`);
+      }
+
+      fecharModal();
+      showToast('Solicitação enviada com sucesso!', 'success');
+      await carregarSolicitacoes();
+    } catch (e) {
+      showToast(`Erro ao enviar: ${e.message}`, 'error');
+    }
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BLOCO 14 — APROVAÇÕES
+══════════════════════════════════════════════════════════════ */
+async function iniciarAprovacoes() {
+  if (USUARIO.perfil !== 'fin' && USUARIO.perfil !== 'mestre') {
+    document.getElementById('aprov-content').innerHTML =
+      `<div class="empty-state"><div class="icon">🔒</div><p>Acesso restrito.</p></div>`;
+    return;
+  }
+  await carregarAprovacoes();
+}
+
+async function carregarAprovacoes() {
+  const content = document.getElementById('aprov-content');
+  content.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>Carregando aprovações...</span></div>`;
+  try {
+    const rows = await sheetsRead(SHEET_GERAL, 'Solicitações!A:V', false);
+    if (!rows || rows.length < 2) {
+      content.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>Nenhuma solicitação encontrada.</p></div>`;
+      return;
+    }
+    const h = rows[0];
+    const all = rows.slice(1).map((r, i) => {
+      const obj = rowToObj(h, r);
+      obj._rowIndex = i + 2;
+      return obj;
+    }).filter(r => r.DATA || r.ITEM);
+
+    const pendentes   = all.filter(r => r.STATUS === 'Em aberto');
+    const aprovadas   = all.filter(r => r.STATUS === 'Pagamento aprovado');
+    const aguardando  = all.filter(r => r.STATUS === 'Solicitado a MeuBilhete');
+
+    content.innerHTML = `
+      ${renderAprovSection('Pendentes de Aprovação', '🟡', pendentes, 'pendente')}
+      ${renderAprovSection('Aguardando MeuBilhete', '🔵', aprovadas, 'meubilhete')}
+      ${renderAprovSection('Confirmar Pagamento', '💚', aguardando, 'confirmar')}
+    `;
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><p style="color:var(--red)">${e.message}</p></div>`;
+  }
+}
+
+function renderAprovSection(titulo, emoji, dados, tipo) {
+  return `
+    <div class="aprov-section">
+      <div class="aprov-section-header">
+        <span style="font-size:18px">${emoji}</span>
+        <h3>${titulo}</h3>
+        <span class="badge-count">${dados.length}</span>
+      </div>
+      <div class="aprov-section-body">
+        ${dados.length === 0
+          ? `<div class="empty-state" style="padding:28px"><div class="icon" style="font-size:24px;margin-bottom:8px">✅</div><p>Nenhuma solicitação nesta etapa.</p></div>`
+          : `<div class="table-wrap"><table>
+              <thead><tr>
+                <th>Data</th><th>Cidade</th><th>Solicitante</th><th>Item</th>
+                <th>Valor</th><th>Parcela</th><th>Ações</th>
+              </tr></thead>
+              <tbody>
+                ${dados.map(r => `
+                  <tr>
+                    <td>${r.DATA||'—'}</td>
+                    <td>${r.CIDADE||'—'}</td>
+                    <td>${r.SOLICITANTE||'—'}</td>
+                    <td class="text-main">${r.ITEM||'—'}</td>
+                    <td>${formatBRL(parseBRL(r['VALOR SOLICITADO (R$)']||0))}</td>
+                    <td>${r.PARCELAS||'à vista'}</td>
+                    <td>${renderAprovAcoes(r, tipo)}</td>
+                  </tr>`).join('')}
+              </tbody>
+            </table></div>`
+        }
+      </div>
+    </div>
+  `;
+}
+
+function renderAprovAcoes(r, tipo) {
+  if (tipo === 'pendente') {
+    return `
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-sm" style="background:var(--green-dim);color:var(--green);border:1px solid rgba(46,204,138,0.3)"
+          onclick="aprovarSolicitacao(${r._rowIndex},'${(r.CIDADE||'').replace(/'/g,"\\'")}','${(r.ITEM||'').replace(/'/g,"\\'")}')">✅ Aprovar</button>
+        <button class="btn btn-sm btn-danger"
+          onclick="abrirModalRejeitar(${r._rowIndex},'${(r.CIDADE||'').replace(/'/g,"\\'")}','${(r.ITEM||'').replace(/'/g,"\\'")}')">❌ Rejeitar</button>
+      </div>`;
+  }
+  if (tipo === 'meubilhete') {
+    return `<button class="btn btn-sm btn-secondary"
+      onclick="enviarMeuBilhete(${r._rowIndex})">→ MeuBilhete</button>`;
+  }
+  if (tipo === 'confirmar') {
+    return `<button class="btn btn-sm" style="background:var(--blue-dim);color:var(--blue);border:1px solid rgba(78,157,245,0.3)"
+      onclick="abrirModalPagamento(${r._rowIndex},'${(r.CIDADE||'').replace(/'/g,"\\'")}','${(r.ITEM||'').replace(/'/g,"\\'")}','${(r['VALOR SOLICITADO (R$)']||'0').replace(/'/g,"\\'")}','${(r['VALOR PAGO (R$)']||'0').replace(/'/g,"\\'")}')">
+      💰 Confirmar Pagamento</button>`;
+  }
+  return '';
+}
+
+async function aprovarSolicitacao(rowIndex, cidade, item) {
+  try {
+    const range = `Solicitações!P${rowIndex}:R${rowIndex}`;
+    await sheetsWrite(SHEET_GERAL, range, [[
+      'Pagamento aprovado', USUARIO.nome, dataHoje()
+    ]]);
+    cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:V`);
+    showToast('Solicitação aprovada!', 'success');
+
+    // WhatsApp → produtores da cidade + FIN002
+    const nomeCidade = cidade;
+    const cid = CIDADES.find(c => c.nome === cidade || c.cidade === cidade.toLowerCase());
+    const cidId = cid?.cidade || cidade.toLowerCase();
+    usuariosDaCidade(cidId).forEach(u =>
+      sendWhatsApp(u.whatsapp, `✅ Sua solicitação '${item}' foi aprovada e encaminhada para pagamento.`));
+    const fin002 = usuarioPorCodigo('FIN002');
+    if (fin002?.whatsapp) sendWhatsApp(fin002.whatsapp,
+      `✅ Solicitação aprovada: ${item} (${nomeCidade}). Encaminhada para pagamento.`);
+
+    await carregarAprovacoes();
+  } catch (e) {
+    showToast(`Erro: ${e.message}`, 'error');
+  }
+}
+
+function abrirModalRejeitar(rowIndex, cidade, item) {
+  abrirModal('Rejeitar Solicitação', `
+    <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Item: <strong>${item}</strong></p>
+    <div class="form-group">
+      <label>Motivo / Justificativa *</label>
+      <textarea class="form-control" id="rej-motivo" rows="3" placeholder="Descreva o motivo da rejeição..."></textarea>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+      <button class="btn btn-secondary" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-danger" id="btn-rej-conf" onclick="confirmarRejeicao(${rowIndex},'${cidade.replace(/'/g,"\\'")}','${item.replace(/'/g,"\\'")}')">Rejeitar</button>
+    </div>
+  `);
+}
+
+async function confirmarRejeicao(rowIndex, cidade, item) {
+  const motivo = document.getElementById('rej-motivo')?.value.trim();
+  if (!motivo) { showToast('Informe o motivo da rejeição.', 'warn'); return; }
+  const btn = document.getElementById('btn-rej-conf');
+  await btnRun(btn, async () => {
+    try {
+      // Atualiza P=STATUS, V=OBS
+      await sheetsWrite(SHEET_GERAL, `Solicitações!P${rowIndex}`, [['Rejeitado']]);
+      await sheetsWrite(SHEET_GERAL, `Solicitações!V${rowIndex}`, [[motivo]]);
+      cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:V`);
+      fecharModal();
+      showToast('Solicitação rejeitada.', 'warn');
+
+      // WhatsApp → produtores da cidade
+      const cid = CIDADES.find(c => c.nome === cidade || c.cidade === cidade.toLowerCase());
+      const cidId = cid?.cidade || cidade.toLowerCase();
+      usuariosDaCidade(cidId).forEach(u =>
+        sendWhatsApp(u.whatsapp, `❌ Sua solicitação '${item}' foi rejeitada. Motivo: ${motivo}`));
+
+      await carregarAprovacoes();
+    } catch (e) {
+      showToast(`Erro: ${e.message}`, 'error');
+    }
+  });
+}
+
+async function enviarMeuBilhete(rowIndex) {
+  try {
+    await sheetsWrite(SHEET_GERAL, `Solicitações!P${rowIndex}`, [['Solicitado a MeuBilhete']]);
+    cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:V`);
+    showToast('Status atualizado → Solicitado a MeuBilhete', 'success');
+    await carregarAprovacoes();
+  } catch (e) {
+    showToast(`Erro: ${e.message}`, 'error');
+  }
+}
+
+function abrirModalPagamento(rowIndex, cidade, item, valorSolStr, valorPagoAnteriorStr) {
+  const valorSol = parseBRL(valorSolStr);
+  const valorPagoAnt = parseBRL(valorPagoAnteriorStr);
+  abrirModal('Confirmar Pagamento', `
+    <p style="font-size:13px;color:var(--text2);margin-bottom:4px">Item: <strong>${item}</strong></p>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:16px">
+      Valor solicitado: ${formatBRL(valorSol)} · Já pago: ${formatBRL(valorPagoAnt)}
+    </p>
+    <div class="form-row col2">
+      <div class="form-group">
+        <label>Valor Pago (R$) *</label>
+        <input class="form-control" id="pg-valor" type="number" min="0" step="0.01" placeholder="0,00">
+      </div>
+      <div class="form-group">
+        <label>Data do Pagamento *</label>
+        <input class="form-control" id="pg-data" type="date" value="${new Date().toISOString().split('T')[0]}">
+      </div>
+    </div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label>Link do Comprovante</label>
+      <input class="form-control" id="pg-comp" placeholder="URL do comprovante (Drive, etc.)">
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--border)">
+      <button class="btn btn-secondary" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-primary" id="btn-pg-conf"
+        onclick="confirmarPagamento(${rowIndex},'${cidade.replace(/'/g,"\\'")}','${item.replace(/'/g,"\\'")}',${valorSol},${valorPagoAnt})">
+        💰 Confirmar
+      </button>
+    </div>
+  `);
+}
+
+async function confirmarPagamento(rowIndex, cidade, item, valorSol, valorPagoAnt) {
+  const valorNovo = parseFloat(document.getElementById('pg-valor')?.value || 0);
+  const dataPg = formatDateBR(document.getElementById('pg-data')?.value || '');
+  const comp = document.getElementById('pg-comp')?.value.trim() || '';
+  if (!valorNovo || !dataPg) { showToast('Preencha valor e data.', 'warn'); return; }
+
+  const btn = document.getElementById('btn-pg-conf');
+  await btnRun(btn, async () => {
+    try {
+      const totalPago = valorPagoAnt + valorNovo;
+      const novoStatus = totalPago >= valorSol ? 'Pago' : 'Pago parcial';
+
+      // Atualiza colunas P, S, T, U, V
+      await sheetsWrite(SHEET_GERAL, `Solicitações!P${rowIndex}`, [[novoStatus]]);
+      await sheetsWrite(SHEET_GERAL, `Solicitações!S${rowIndex}:V${rowIndex}`, [[
+        USUARIO.nome, dataPg, totalPago, comp
+      ]]);
+      cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:V`);
+
+      // Atualiza PPP da cidade (colunas J e K)
+      const cid = CIDADES.find(c => c.nome === cidade || c.cidade === cidade.toLowerCase());
+      if (cid?.idSheet) {
+        try {
+          const pppRows = await sheetsRead(cid.idSheet, 'Produção!A:N', false);
+          if (pppRows && pppRows.length > 1) {
+            const h = pppRows[0];
+            const match = pppRows.slice(1).findIndex(r => {
+              const obj = rowToObj(h, r);
+              return obj.ITEM && obj.ITEM.toLowerCase() === item.toLowerCase();
+            });
+            if (match >= 0) {
+              const pppRowIdx = match + 2;
+              await sheetsWrite(cid.idSheet, `Produção!J${pppRowIdx}:K${pppRowIdx}`, [[totalPago, novoStatus]]);
+              cacheInvalidate(`${cid.idSheet}::Produção!A:N`);
+            }
+          }
+        } catch (e2) { console.warn('Erro ao atualizar PPP:', e2); }
+      }
+
+      fecharModal();
+      showToast(`Pagamento confirmado — ${novoStatus}!`, 'success');
+
+      // WhatsApp → produtores da cidade + FIN001
+      const cidId = cid?.cidade || cidade.toLowerCase();
+      usuariosDaCidade(cidId).forEach(u =>
+        sendWhatsApp(u.whatsapp, `💰 Pagamento de '${item}' confirmado — ${formatBRL(valorNovo)}.`));
+      const fin001 = usuarioPorCodigo('FIN001');
+      if (fin001?.whatsapp) sendWhatsApp(fin001.whatsapp,
+        `💰 Pagamento de '${item}' (${cidade}) confirmado — ${formatBRL(valorNovo)}.`);
+
+      await carregarAprovacoes();
+    } catch (e) {
+      showToast(`Erro: ${e.message}`, 'error');
+    }
+  });
 }
 
 /* ══════════════════════════════════════════════════════════════
