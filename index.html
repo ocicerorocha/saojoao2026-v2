@@ -721,6 +721,18 @@ function formatDateBR(isoDate) {
   return `${d}/${m}/${y}`;
 }
 
+// Bug #3: força o Sheets a tratar a data como texto literal, evitando conversão
+// automática para serial numérico (ex.: 06/05/2026 vira 46172).
+// O apóstrofo inicial é o escape padrão do Sheets para "este é um texto, não fórmula/data".
+function textoData(s) {
+  if (!s) return '';
+  const str = String(s).trim();
+  if (!str) return '';
+  // Já tem apóstrofo? não dobra.
+  if (str.startsWith("'")) return str;
+  return "'" + str;
+}
+
 function isoToInput(dataBR) {
   // DD/MM/AAAA → YYYY-MM-DD para inputs
   if (!dataBR) return '';
@@ -1776,7 +1788,7 @@ async function salvarItemProd(rowIndex) {
         await sheetsWrite(sheetId, `Produção!A${rowIndex}:N${rowIndex}`, [row]);
 
         // Grava no Alertas & Histórico
-        const histRow = [agora(), USUARIO.nome, item, cidadeNome(CIDADE_ATIVA),
+        const histRow = [textoData(agora()), USUARIO.nome, item, cidadeNome(CIDADE_ATIVA),
           formatBRL(totAnterior), formatBRL(tot), `${variacao}%`, 'Edição Produção', obs];
         sheetsAppend(SHEET_GERAL, 'Alertas & Histórico!A:I', [histRow]).catch(() => {});
       } else {
@@ -1799,7 +1811,7 @@ async function salvarItemProd(rowIndex) {
 let solicData = [];   // solicitações carregadas
 let _solicCidade = '';
 let solicFiltroSt = '';
-let solicFiltroCid = '';
+// Bug #2: filtro de cidade local removido — agora usa CIDADE_ATIVA do topbar
 
 // Etapas do formulário
 let _solicEtapa = 1;
@@ -1832,30 +1844,25 @@ async function carregarSolicitacoes() {
 
 function renderSolicTabela(content) {
   const p = USUARIO.perfil;
-  const cids = cidadesVisiveis();
 
   // Filtra por perfil
   let dados = solicData;
-  if (p === 'prod') dados = dados.filter(r => (r.CIDADE||'').toLowerCase() === CIDADE_ATIVA);
-  // socio vê todas (como mestre e fin) — removida restrição anterior
+  if (p === 'prod') dados = dados.filter(r => normCid(r.CIDADE) === normCid(CIDADE_ATIVA));
+  // socio/mestre/fin: respeita o topbar (única fonte da verdade para visualização — Bug #2)
+  else if (CIDADE_ATIVA && CIDADE_ATIVA !== 'todas') {
+    dados = dados.filter(r => normCid(r.CIDADE) === normCid(CIDADE_ATIVA));
+  }
 
-  // Filtros ativos
+  // Filtros ativos (apenas status — filtro de cidade foi removido em Bug #2)
   if (solicFiltroSt) dados = dados.filter(r => r.STATUS === solicFiltroSt);
-  if (solicFiltroCid) dados = dados.filter(r => (r.CIDADE||'').toLowerCase() === solicFiltroCid);
 
   const statusList = ['Em aberto','Pagamento aprovado','Solicitado a MeuBilhete','Pago parcial','Pago','Rejeitado'];
-  const mostrarCidFiltro = (p === 'mestre' || p === 'fin' || p === 'socio');
 
   content.innerHTML = `
     <div class="section-block">
       <div class="section-block-header" style="flex-wrap:wrap;gap:10px">
         <h3>Histórico de Solicitações <span class="badge badge-gray">${dados.length}</span></h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          ${mostrarCidFiltro ? `
-            <select class="filter-select" id="sf-filtro-cid" onchange="setSolicFiltro('cid',this.value)">
-              <option value="">Todas as cidades</option>
-              ${cids.map(c => `<option value="${c.cidade}" ${solicFiltroCid===c.cidade?'selected':''}>${c.nome}</option>`).join('')}
-            </select>` : ''}
           <select class="filter-select" id="sf-filtro-st" onchange="setSolicFiltro('st',this.value)">
             <option value="">Todos os status</option>
             ${statusList.map(s => `<option value="${s}" ${solicFiltroSt===s?'selected':''}>${s}</option>`).join('')}
@@ -1891,7 +1898,7 @@ function renderSolicTabela(content) {
 
 function setSolicFiltro(tipo, val) {
   if (tipo === 'st') solicFiltroSt = val;
-  if (tipo === 'cid') solicFiltroCid = val;
+  // Bug #2: filtro de cidade ('cid') removido — usa CIDADE_ATIVA do topbar
   renderSolicTabela(document.getElementById('solic-content'));
 }
 
@@ -1996,12 +2003,16 @@ function renderSolicStep1() {
   const f = _solicForm;
   const cidSel = p === 'prod' ? CIDADE_ATIVA : (f.cidade || cids[0]?.cidade || '');
 
-  // Se prodData vazio, carrega em background e re-renderiza o step
-  if (prodData.length === 0 && cidSel) {
+  // Bug #1: recarrega prodData sempre que a cidade do FORM diferir da carregada
+  // (a cidade do form é fonte da verdade neste contexto, não o topbar)
+  if (cidSel && _prodCidade !== cidSel) {
+    prodData = []; // limpa antes de recarregar para evitar uso de dados de outra cidade
     const sheetId = cidadeSheet(cidSel);
     if (sheetId) {
       sheetsRead(sheetId, 'Produção!A:N', true).then(rows => {
-        if (!rows || rows.length < 2) return;
+        // Só aplica o resultado se a cidade do form ainda for esta (evita race condition)
+        if (_solicForm.cidade && _solicForm.cidade !== cidSel) return;
+        if (!rows || rows.length < 2) { _prodCidade = cidSel; return; }
         const header = rows[0];
         prodData = rows.slice(1).map((row, i) => {
           const obj = rowToObj(header, row);
@@ -2083,7 +2094,16 @@ function renderSolicStep1() {
 }
 
 function onSolicCidadeChange(val) {
+  // Bug #1: muda de cidade → invalida dados de Produção e reseta seleções dependentes
   _solicForm.cidade = val;
+  _solicForm.categoria = '';
+  _solicForm.item = '';
+  _solicForm.descricao = _solicForm.descricao || '';
+  _solicForm.custo26 = '';
+  _solicForm._fornecedorRef = '';
+  _solicForm._prodRowIndex = null;
+  prodData = [];
+  _prodCidade = '';
   document.getElementById('solic-step-body').innerHTML = renderSolicStep();
 }
 function onSolicCatChange(val) {
@@ -2101,8 +2121,53 @@ function onSolicCatChange(val) {
 }
 function onSolicItemChange(val) {
   const custom = document.getElementById('sf-item-custom');
-  if (val === '__outro__') { custom.style.display = 'block'; custom.focus(); }
-  else { custom.style.display = 'none'; }
+  if (val === '__outro__') {
+    custom.style.display = 'block'; custom.focus();
+    // Item customizado: não há referência na Produção
+    _solicForm._prodRowIndex = null;
+    _solicForm.custo26 = '';
+    _solicForm._fornecedorRef = '';
+    return;
+  }
+  custom.style.display = 'none';
+  // Item da Produção: armazena rowIndex e custo26 já a partir do prodData carregado
+  // (prodData aqui é, por garantia do Bug #1, da cidade selecionada no form)
+  const ref = prodData.find(r => r.ITEM === val && r['STATUS'] === 'Orçado');
+  if (ref) {
+    _solicForm._prodRowIndex = ref._rowIndex;
+    _solicForm.custo26 = parseBRL(ref['TOTAL 2026 (R$)']||0).toFixed(2);
+    _solicForm._fornecedorRef = ref.FORNECEDOR || '';
+  } else {
+    _solicForm._prodRowIndex = null;
+    _solicForm.custo26 = '';
+    _solicForm._fornecedorRef = '';
+  }
+}
+
+// Bug #8: atualiza badge informativo de diferença entre Valor Solicitado e Custo 2026
+function renderSolicDiffInfo() {
+  const el = document.getElementById('sf-diff-info');
+  if (!el) return;
+  const valor = parseFloat(document.getElementById('sf-valor')?.value || 0) || 0;
+  const custo = parseFloat(_solicForm.custo26 || 0) || 0;
+  // Sem custo de referência (item digitado) → não mostra nada
+  if (!custo) { el.innerHTML = ''; return; }
+  if (!valor) { el.innerHTML = ''; return; }
+  const diff = valor - custo;
+  if (Math.abs(diff) < 0.01) {
+    el.innerHTML = `<span style="color:var(--green)">✓ Valor solicitado igual ao orçado.</span>`;
+    return;
+  }
+  const pct = ((diff / custo) * 100).toFixed(1).replace('.', ',');
+  if (diff > 0) {
+    el.innerHTML = `<span style="display:inline-block;padding:3px 10px;border-radius:10px;background:rgba(245,158,11,0.12);color:#f59e0b;font-weight:600">+${formatBRL(diff)} acima do orçado (${pct}%)</span>`;
+  } else {
+    el.innerHTML = `<span style="display:inline-block;padding:3px 10px;border-radius:10px;background:rgba(59,130,246,0.12);color:var(--blue);font-weight:600">−${formatBRL(Math.abs(diff))} abaixo do orçado (${pct}%)</span>`;
+  }
+}
+
+function onSolicValorChange() {
+  renderSolicDiffInfo();
 }
 
 function renderSolicStep2() {
@@ -2139,13 +2204,19 @@ function renderSolicStep2() {
       <div class="form-row col2">
         <div class="form-group">
           <label>Valor Solicitado (R$) *</label>
-          <input class="form-control" id="sf-valor" type="number" min="0" step="0.01" value="${f.valor||''}">
+          <input class="form-control" id="sf-valor" type="number" min="0" step="0.01" value="${f.valor||''}" oninput="onSolicValorChange()">
         </div>
         <div class="form-group">
           <label>Custo 2026 — referência (R$) <span style="font-size:10px;color:var(--text3)">(item Orçado na Produção)</span></label>
-          <input class="form-control" id="sf-custo26" readonly value="${f.custo26 ? formatBRL(parseFloat(f.custo26)) : ''}" placeholder="—" style="${f.custo26 ? 'color:var(--accent)' : ''}">
+          <div class="form-control" id="sf-custo26-view"
+            style="display:flex;align-items:center;background:var(--bg2);color:${f.custo26 ? 'var(--accent)' : 'var(--text3)'};font-weight:600;cursor:not-allowed;user-select:none"
+            title="Valor imutável — referência da aba Produção">
+            ${f.custo26 ? formatBRL(parseFloat(f.custo26)) : '—'}
+          </div>
         </div>
       </div>
+      <!-- Bug #8: badge informativo de diferença Valor vs Custo 2026 -->
+      <div id="sf-diff-info" style="margin:-6px 0 10px;min-height:22px;font-size:12px"></div>
       <div class="step-nav">
         <button class="btn btn-secondary" onclick="solicVoltar(2)">← Voltar</button>
         <button class="btn btn-primary" onclick="solicProximo(2)">Próximo →</button>
@@ -2168,30 +2239,39 @@ function renderSolicStep3() {
       <div id="sf-parcelas-wrap">
         ${renderParcelasUI()}
       </div>
+      <!-- Bug #7: indicador de soma das parcelas em tempo real -->
+      <div id="sf-parc-soma" style="margin:10px 0 4px;min-height:22px;font-size:12px"></div>
       <div class="step-nav">
         <button class="btn btn-secondary" onclick="solicVoltar(3)">← Voltar</button>
-        <button class="btn btn-primary" onclick="solicProximo(3)">Revisar →</button>
+        <button class="btn btn-primary" id="sf-btn-revisar" onclick="solicProximo(3)">Revisar →</button>
       </div>
     </div>
   `;
 }
 
 function renderParcelasUI() {
+  // Bug #7: à vista — valor pré-preenchido com o valor solicitado e travado
   if (!_solicParcelado) {
+    const valorSolic = parseFloat(_solicForm.valor || 0) || 0;
     const p0 = _solicParcelas[0] || { venc: '', valor: '' };
+    // Sincroniza o valor da parcela única com o valor solicitado
+    p0.valor = valorSolic ? valorSolic.toFixed(2) : '';
+    _solicParcelas = [p0];
     return `
       <div class="form-row col2">
         <div class="form-group">
           <label>Data de Vencimento</label>
-          <input class="form-control" id="sf-parc-0-venc" type="date" value="${p0.venc||''}">
+          <input class="form-control" id="sf-parc-0-venc" type="date" value="${p0.venc||''}" onchange="onParcelaInput()">
         </div>
         <div class="form-group">
-          <label>Valor (R$)</label>
-          <input class="form-control" id="sf-parc-0-valor" type="number" step="0.01" min="0" value="${p0.valor||''}">
+          <label>Valor (R$) <span style="font-size:10px;color:var(--text3)">(igual ao solicitado)</span></label>
+          <input class="form-control" id="sf-parc-0-valor" type="number" step="0.01" min="0" value="${p0.valor||''}" disabled
+            style="background:var(--bg2);cursor:not-allowed;color:var(--accent);font-weight:600">
         </div>
       </div>
     `;
   }
+  // Bug #7: parcelado — valores começam vazios (sem auto-divisão)
   return `
     <div id="sf-parcelas-list">
       ${_solicParcelas.map((p, i) => `
@@ -2199,11 +2279,11 @@ function renderParcelasUI() {
           <span style="font-weight:700;color:var(--text3);font-size:12px">${i+1}ª</span>
           <div class="form-group">
             <label>Vencimento</label>
-            <input class="form-control" id="sf-parc-${i}-venc" type="date" value="${p.venc||''}">
+            <input class="form-control" id="sf-parc-${i}-venc" type="date" value="${p.venc||''}" onchange="onParcelaInput()">
           </div>
           <div class="form-group">
             <label>Valor (R$)</label>
-            <input class="form-control" id="sf-parc-${i}-valor" type="number" step="0.01" min="0" value="${p.valor||''}">
+            <input class="form-control" id="sf-parc-${i}-valor" type="number" step="0.01" min="0" value="${p.valor||''}" oninput="onParcelaInput()">
           </div>
         </div>
       `).join('')}
@@ -2215,23 +2295,70 @@ function renderParcelasUI() {
   `;
 }
 
+// Bug #7: handler em tempo real do input das parcelas
+function onParcelaInput() {
+  renderParcelasSomaInfo();
+}
+
+// Bug #7: renderiza badge informativo da soma das parcelas vs valor solicitado
+// Também ativa/desativa o botão "Revisar →" conforme a divergência.
+function renderParcelasSomaInfo() {
+  const el = document.getElementById('sf-parc-soma');
+  const btnRev = document.getElementById('sf-btn-revisar');
+  if (!el) return;
+  const valorSolic = parseFloat(_solicForm.valor || 0) || 0;
+  let soma = 0;
+  for (let i = 0; i < _solicParcelas.length; i++) {
+    soma += parseFloat(document.getElementById(`sf-parc-${i}-valor`)?.value || 0) || 0;
+  }
+  // À vista — não precisa de mensagem (campo já travado e igual)
+  if (!_solicParcelado) {
+    el.innerHTML = '';
+    if (btnRev) btnRev.disabled = false;
+    return;
+  }
+  if (!valorSolic) {
+    el.innerHTML = `<span style="color:var(--text3)">Volte ao passo anterior e informe o valor solicitado.</span>`;
+    if (btnRev) btnRev.disabled = true;
+    return;
+  }
+  const diff = soma - valorSolic;
+  if (Math.abs(diff) < 0.01 && soma > 0) {
+    el.innerHTML = `<span style="display:inline-block;padding:3px 10px;border-radius:10px;background:rgba(46,204,138,0.12);color:var(--green);font-weight:600">✓ Total das parcelas: ${formatBRL(soma)} / ${formatBRL(valorSolic)}</span>`;
+    if (btnRev) btnRev.disabled = false;
+  } else {
+    const sinal = diff > 0 ? '+' : '−';
+    el.innerHTML = `<span style="display:inline-block;padding:3px 10px;border-radius:10px;background:rgba(239,68,68,0.12);color:var(--red);font-weight:600">⚠ Total das parcelas: ${formatBRL(soma)} / ${formatBRL(valorSolic)} — diferença ${sinal}${formatBRL(Math.abs(diff))}</span>`;
+    if (btnRev) btnRev.disabled = true;
+  }
+}
+
 function toggleParcelado(checked) {
   // Salva dados atuais antes de re-renderizar
   salvaParcelas();
   _solicParcelado = checked;
   if (!_solicParcelado && _solicParcelas.length > 1) _solicParcelas = [_solicParcelas[0]];
+  // Bug #7: ao ativar parcelado, parcelas começam vazias (sem auto-divisão)
+  if (_solicParcelado) {
+    _solicParcelas = _solicParcelas.map(p => ({ venc: p.venc || '', valor: '' }));
+    if (_solicParcelas.length === 0) _solicParcelas = [{ venc: '', valor: '' }];
+  }
   document.getElementById('sf-parcelas-wrap').innerHTML = renderParcelasUI();
+  renderParcelasSomaInfo();
 }
 
 function addParcela() {
   salvaParcelas();
+  // Bug #7: nova parcela vem com valor vazio (sem auto-divisão)
   _solicParcelas.push({ venc: '', valor: '' });
   document.getElementById('sf-parcelas-wrap').innerHTML = renderParcelasUI();
+  renderParcelasSomaInfo();
 }
 function removeParcela() {
   salvaParcelas();
   if (_solicParcelas.length > 1) _solicParcelas.pop();
   document.getElementById('sf-parcelas-wrap').innerHTML = renderParcelasUI();
+  renderParcelasSomaInfo();
 }
 
 function salvaParcelas() {
@@ -2304,11 +2431,20 @@ function solicProximo(etapaAtual) {
     _solicForm.item = item;
     _solicForm.descricao = desc;
 
-    // Custo 2026: busca na produção pelo item exato
-    const ref = prodData.find(r => r.ITEM && r.ITEM.toLowerCase() === item.toLowerCase() && r['STATUS'] === 'Orçado');
-    _solicForm.custo26 = ref ? parseBRL(ref['TOTAL 2026 (R$)']||0).toFixed(2) : '';
-    // Fornecedor pré-preenchido se disponível
-    _solicForm._fornecedorRef = ref?.FORNECEDOR || '';
+    // Bug #1: só usa prodData se foi carregado para a MESMA cidade do form
+    // Caso contrário, custo26 deve ter sido setado em onSolicItemChange (ou ficará vazio)
+    if (_prodCidade === cidade) {
+      const ref = prodData.find(r => r.ITEM && r.ITEM.toLowerCase() === item.toLowerCase() && r['STATUS'] === 'Orçado');
+      if (ref) {
+        _solicForm.custo26 = parseBRL(ref['TOTAL 2026 (R$)']||0).toFixed(2);
+        _solicForm._fornecedorRef = ref?.FORNECEDOR || '';
+        _solicForm._prodRowIndex = ref._rowIndex;
+      } else {
+        // Item digitado manualmente (não existe na Produção)
+        _solicForm.custo26 = _solicForm.custo26 || '';
+        _solicForm._prodRowIndex = null;
+      }
+    }
   } else if (etapaAtual === 2) {
     const fav = document.getElementById('sf-fav')?.value.trim();
     const valor = document.getElementById('sf-valor')?.value;
@@ -2319,10 +2455,24 @@ function solicProximo(etapaAtual) {
     _solicForm.conta = document.getElementById('sf-conta')?.value.trim();
     _solicForm.pix = document.getElementById('sf-pix')?.value.trim();
     _solicForm.valor = valor;
-    _solicForm.custo26 = document.getElementById('sf-custo26')?.value || '';
+    // Bug #4: NUNCA reler custo26 do DOM — ele é imutável após o passo 1.
+    // (Releitura causava Bug #6: valor formatado em BRL virava NaN no próximo render)
   } else if (etapaAtual === 3) {
     salvaParcelas();
     if (_solicParcelas.some(p => !p.venc)) { showToast('Informe a data de vencimento de todas as parcelas.', 'warn'); return; }
+    // Bug #7: à vista — força o valor da parcela única igual ao valor solicitado
+    if (!_solicParcelado) {
+      const valorSolic = parseFloat(_solicForm.valor || 0) || 0;
+      if (_solicParcelas[0]) _solicParcelas[0].valor = valorSolic.toFixed(2);
+    } else {
+      // Bug #7: parcelado — soma deve bater com o valor solicitado
+      const valorSolic = parseFloat(_solicForm.valor || 0) || 0;
+      const soma = _solicParcelas.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+      if (Math.abs(soma - valorSolic) > 0.01) {
+        showToast(`Soma das parcelas (${formatBRL(soma)}) deve ser igual ao valor solicitado (${formatBRL(valorSolic)}).`, 'warn');
+        return;
+      }
+    }
   }
   _solicEtapa = etapaAtual + 1;
   atualizarSolicModal();
@@ -2347,6 +2497,88 @@ function atualizarSolicModal() {
     </div>`;
   }).join('');
   document.getElementById('solic-step-body').innerHTML = renderSolicStep();
+  // Bug #8: ao entrar/voltar na etapa 2, renderiza badge de diferença com valor atual
+  if (_solicEtapa === 2) renderSolicDiffInfo();
+  // Bug #7: ao entrar/voltar na etapa 3, renderiza badge da soma das parcelas
+  if (_solicEtapa === 3) renderParcelasSomaInfo();
+}
+
+/* ──────────────────────────────────────────────────────────────
+   Bug #5: helper para atualizar status do item na Produção da PPP
+   ────────────────────────────────────────────────────────────── */
+
+// Localiza rowIndex (1-based) do item na Produção da cidade.
+// Faz match por CATEGORIA + ITEM (case-insensitive). Se categoria vazia, casa só por item.
+// Retorna { rowIndex, status } ou null.
+async function localizarItemProducao(cidade, categoria, item) {
+  if (!cidade || !item) return null;
+  const cid = CIDADES.find(c =>
+    normCid(c.cidade) === normCid(cidade) || normCid(c.nome) === normCid(cidade)
+  );
+  if (!cid?.idSheet) return null;
+  try {
+    const rows = await sheetsRead(cid.idSheet, 'Produção!A:N', true);
+    if (!rows || rows.length < 2) return null;
+    const header = rows[0];
+    const itemNorm = String(item).toLowerCase().trim();
+    const catNorm = String(categoria||'').toLowerCase().trim();
+    for (let i = 1; i < rows.length; i++) {
+      const obj = rowToObj(header, rows[i]);
+      const itemOk = obj.ITEM && String(obj.ITEM).toLowerCase().trim() === itemNorm;
+      const catOk = !catNorm || (obj.CATEGORIA && String(obj.CATEGORIA).toLowerCase().trim() === catNorm);
+      if (itemOk && catOk) {
+        return { rowIndex: i + 1, status: obj['STATUS'] || '' };
+      }
+    }
+  } catch(_e){ console.warn('localizarItemProducao falhou:', _e); }
+  return null;
+}
+
+async function atualizarStatusProducao(cidade, prodRowIndex, novoStatus, contexto = {}) {
+  // cidade: 'irece' | 'serrinha' | 'jequie' | nome formatado
+  // prodRowIndex: linha 1-based na aba Produção (vindo de _rowIndex)
+  // novoStatus: string conforme STATUS_PROD
+  // contexto: { item, valor, motivo, usuario? } para registrar no histórico
+  if (!cidade || !prodRowIndex || !novoStatus) return false;
+  const cid = CIDADES.find(c =>
+    normCid(c.cidade) === normCid(cidade) || normCid(c.nome) === normCid(cidade)
+  );
+  if (!cid?.idSheet) {
+    console.warn('atualizarStatusProducao: cidade sem planilha PPP', cidade);
+    return false;
+  }
+  try {
+    // Lê status atual para registrar no histórico (antes/depois)
+    let statusAnterior = '';
+    try {
+      const rows = await sheetsRead(cid.idSheet, `Produção!K${prodRowIndex}:K${prodRowIndex}`, true);
+      statusAnterior = (rows && rows[0] && rows[0][0]) || '';
+    } catch(_e){}
+
+    // Atualiza apenas a coluna K (STATUS) — não toca em outras
+    await sheetsWrite(cid.idSheet, `Produção!K${prodRowIndex}:K${prodRowIndex}`, [[novoStatus]]);
+    cacheInvalidate(`${cid.idSheet}::Produção!A:N`);
+
+    // Registra mudança em Alertas & Histórico (formato texto BR — Bug #9)
+    try {
+      const histRow = [
+        textoData(agora()),                         // A DATA/HORA (texto BR forçado — Bug #9)
+        (contexto.usuario || USUARIO.nome),         // B USUÁRIO
+        contexto.item || '',                        // C ITEM
+        cid.nome,                                   // D CIDADE
+        statusAnterior,                             // E valor antigo (status anterior)
+        novoStatus,                                 // F valor novo
+        '—',                                        // G variação (não aplicável a texto)
+        'Mudança de status',                        // H tipo
+        contexto.motivo || ''                       // I observação
+      ];
+      sheetsAppend(SHEET_GERAL, 'Alertas & Histórico!A:I', [histRow]).catch(() => {});
+    } catch(_e){}
+    return true;
+  } catch (e) {
+    console.warn('atualizarStatusProducao falhou:', e);
+    return false;
+  }
 }
 
 async function enviarSolicitacao() {
@@ -2359,12 +2591,40 @@ async function enviarSolicitacao() {
       const nomeCidade = cidadeNome(cidade);
       const n = _solicParcelas.length;
 
+      // Bug #4: validação de integridade — relê custo da Produção da cidade
+      // e compara com o custo26 capturado no passo 1. Aborta se divergir.
+      if (f._prodRowIndex && f.item) {
+        try {
+          const sheetIdValid = cidadeSheet(cidade);
+          if (sheetIdValid) {
+            const rowsValid = await sheetsRead(sheetIdValid, 'Produção!A:N', true);
+            if (rowsValid && rowsValid.length >= 2) {
+              const headerValid = rowsValid[0];
+              const linhaValid = rowsValid[f._prodRowIndex - 1]; // _rowIndex é 1-based no Sheets
+              if (linhaValid) {
+                const objValid = rowToObj(headerValid, linhaValid);
+                const custoAtual = parseBRL(objValid['TOTAL 2026 (R$)']||0);
+                const custoForm = parseFloat(f.custo26) || 0;
+                // Tolerância de 1 centavo para arredondamento BRL
+                if (Math.abs(custoAtual - custoForm) > 0.01) {
+                  showToast('Inconsistência detectada no valor orçado — recarregue a página e tente novamente.', 'error');
+                  return;
+                }
+              }
+            }
+          }
+        } catch(eValid) {
+          // Se a validação falhar por erro de rede, segue o fluxo (não bloqueia por falha de leitura)
+          console.warn('Validação de custo26 falhou:', eValid);
+        }
+      }
+
       // Monta linhas (uma por parcela)
       const linhas = _solicParcelas.map((p, i) => {
         const parcelaLabel = _solicParcelado ? `${n}x Parcela ${i+1}/${n}` : 'à vista';
-        const vencFormatado = formatDateBR(p.venc) || '';
+        const vencFormatado = textoData(formatDateBR(p.venc)) || '';
         return [
-          dataHoje(),            // A DATA
+          textoData(dataHoje()), // A DATA (forçada como texto — Bug #3)
           nomeCidade,            // B CIDADE
           USUARIO.nome,          // C SOLICITANTE
           USUARIO.whatsapp,      // D WHATSAPP
@@ -2390,6 +2650,15 @@ async function enviarSolicitacao() {
 
       await sheetsAppend(SHEET_GERAL, 'Solicitações!A:V', linhas);
       cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:V`);
+
+      // Bug #5: propaga status para a Produção da PPP da cidade
+      // (item passa de "Orçado" → "Pagamento solicitado")
+      if (f._prodRowIndex) {
+        atualizarStatusProducao(cidade, f._prodRowIndex, 'Pagamento solicitado', {
+          item: f.item,
+          motivo: `Solicitação de pagamento — ${formatBRL(parseFloat(f.valor)||0)}`
+        }).catch(() => {});
+      }
 
       // WhatsApp → FIN001
       const fin001 = usuarioPorCodigo('FIN001');
@@ -2438,9 +2707,19 @@ async function carregarAprovacoes() {
     // Mantém solicData sincronizado para abrirDetalheSolic
     solicData = all;
 
-    const pendentes   = all.filter(r => r.STATUS === 'Em aberto');
-    const aprovadas   = all.filter(r => r.STATUS === 'Pagamento aprovado');
-    const aguardando  = all.filter(r => r.STATUS === 'Solicitado a MeuBilhete');
+    // Bug #2: Aprovações respeita o filtro do topbar (única fonte da verdade para visualização)
+    // perfil 'prod' é forçado à sua cidade; outros perfis: filtra se topbar != 'todas'
+    const p = USUARIO.perfil;
+    let escopo = all;
+    if (p === 'prod') {
+      escopo = escopo.filter(r => normCid(r.CIDADE) === normCid(CIDADE_ATIVA));
+    } else if (CIDADE_ATIVA && CIDADE_ATIVA !== 'todas') {
+      escopo = escopo.filter(r => normCid(r.CIDADE) === normCid(CIDADE_ATIVA));
+    }
+
+    const pendentes   = escopo.filter(r => r.STATUS === 'Em aberto');
+    const aprovadas   = escopo.filter(r => r.STATUS === 'Pagamento aprovado');
+    const aguardando  = escopo.filter(r => r.STATUS === 'Solicitado a MeuBilhete');
 
     content.innerHTML = `
       ${renderAprovSection('Pendentes de Aprovação', '🟡', pendentes, 'pendente')}
@@ -2530,15 +2809,29 @@ async function aprovarSolicitacao(rowIndex, cidade, item) {
   try {
     const range = `Solicitações!P${rowIndex}:R${rowIndex}`;
     await sheetsWrite(SHEET_GERAL, range, [[
-      'Pagamento aprovado', USUARIO.nome, dataHoje()
+      'Pagamento aprovado', USUARIO.nome, textoData(dataHoje())
     ]]);
     cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:V`);
+
+    // Bug #5: propaga "Pagamento aprovado" para a Produção da PPP da cidade
+    try {
+      const solic = solicData.find(s => s._rowIndex === rowIndex);
+      const cat = solic?.CATEGORIA || '';
+      const loc = await localizarItemProducao(cidade, cat, item);
+      if (loc) {
+        await atualizarStatusProducao(cidade, loc.rowIndex, 'Pagamento aprovado', {
+          item, motivo: 'Aprovação financeira'
+        });
+      }
+    } catch(_e){ console.warn('Propagação aprovar→Produção falhou:', _e); }
+
     showToast('Solicitação aprovada!', 'success');
 
     // WhatsApp → produtores da cidade + FIN002
     const nomeCidade = cidade;
-    const cid = CIDADES.find(c => c.nome === cidade || c.cidade === cidade.toLowerCase());
-    const cidId = cid?.cidade || cidade.toLowerCase();
+    // Princípio 6: normCid para tolerar cidades acentuadas
+    const cid = CIDADES.find(c => normCid(c.nome) === normCid(cidade) || normCid(c.cidade) === normCid(cidade));
+    const cidId = cid?.cidade || normCid(cidade);
     usuariosDaCidade(cidId).forEach(u =>
       sendWhatsApp(u.whatsapp, `✅ Sua solicitação '${item}' foi aprovada e encaminhada para pagamento.`));
     const fin002 = usuarioPorCodigo('FIN002');
@@ -2575,12 +2868,27 @@ async function confirmarRejeicao(rowIndex, cidade, item) {
       await sheetsWrite(SHEET_GERAL, `Solicitações!P${rowIndex}`, [['Rejeitado']]);
       await sheetsWrite(SHEET_GERAL, `Solicitações!V${rowIndex}`, [[motivo]]);
       cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:V`);
+
+      // Bug #5: reverte status na Produção para "Orçado"
+      // (só reverte se o item de fato estava em estado de pagamento — não derruba pagamentos já confirmados)
+      try {
+        const solic = solicData.find(s => s._rowIndex === rowIndex);
+        const cat = solic?.CATEGORIA || '';
+        const loc = await localizarItemProducao(cidade, cat, item);
+        if (loc && (loc.status === 'Pagamento solicitado' || loc.status === 'Pagamento aprovado')) {
+          await atualizarStatusProducao(cidade, loc.rowIndex, 'Orçado', {
+            item, motivo: `Solicitação rejeitada: ${motivo}`
+          });
+        }
+      } catch(_e){ console.warn('Propagação rejeitar→Produção falhou:', _e); }
+
       fecharModal();
       showToast('Solicitação rejeitada.', 'warn');
 
       // WhatsApp → produtores da cidade
-      const cid = CIDADES.find(c => c.nome === cidade || c.cidade === cidade.toLowerCase());
-      const cidId = cid?.cidade || cidade.toLowerCase();
+      // Princípio 6: normCid para tolerar cidades acentuadas
+      const cid = CIDADES.find(c => normCid(c.nome) === normCid(cidade) || normCid(c.cidade) === normCid(cidade));
+      const cidId = cid?.cidade || normCid(cidade);
       usuariosDaCidade(cidId).forEach(u =>
         sendWhatsApp(u.whatsapp, `❌ Sua solicitação '${item}' foi rejeitada. Motivo: ${motivo}`));
 
@@ -2649,39 +2957,54 @@ async function confirmarPagamento(rowIndex, cidade, item, valorSol, valorPagoAnt
       // Atualiza: P=STATUS, S=PAGO POR, T=DATA PAGAMENTO REAL (sobrescreve vencimento), U=VALOR PAGO TOTAL, V=COMPROVANTE
       await sheetsWrite(SHEET_GERAL, `Solicitações!P${rowIndex}`, [[novoStatus]]);
       await sheetsWrite(SHEET_GERAL, `Solicitações!S${rowIndex}:V${rowIndex}`, [[
-        USUARIO.nome, dataPg, totalPago, comp
+        USUARIO.nome, textoData(dataPg), totalPago, comp
       ]]);
       cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:V`);
 
-      // Atualiza PPP da cidade (colunas J, K e L=fornecedor se em branco)
-      const cid = CIDADES.find(c => c.nome === cidade || c.cidade === cidade.toLowerCase());
-      if (cid?.idSheet) {
-        try {
-          const pppRows = await sheetsRead(cid.idSheet, 'Produção!A:N', false);
-          if (pppRows && pppRows.length > 1) {
-            const h = pppRows[0];
-            const match = pppRows.slice(1).findIndex(r => {
-              const obj = rowToObj(h, r);
-              return obj.ITEM && obj.ITEM.toLowerCase() === item.toLowerCase();
-            });
-            if (match >= 0) {
-              const pppRowIdx = match + 2;
-              const pppRow = rowToObj(h, pppRows[match + 1]);
-              // Busca favorecido da solicitação para preencher fornecedor se vazio
-              const solicRef = solicData.find(s => s._rowIndex === rowIndex);
-              const fornecedor = pppRow['FORNECEDOR'] || solicRef?.FAVORECIDO || '';
-              await sheetsWrite(cid.idSheet, `Produção!J${pppRowIdx}:L${pppRowIdx}`, [[totalPago, novoStatus, fornecedor]]);
-              cacheInvalidate(`${cid.idSheet}::Produção!A:N`);
+      // Atualiza PPP da cidade (colunas J=valor pago, K=status, L=fornecedor se em branco)
+      // Bug #5: agora usa localizarItemProducao (com normCid) + grava no histórico
+      try {
+        const solic = solicData.find(s => s._rowIndex === rowIndex);
+        const cat = solic?.CATEGORIA || '';
+        const loc = await localizarItemProducao(cidade, cat, item);
+        if (loc) {
+          const cidNorm = CIDADES.find(c => normCid(c.cidade) === normCid(cidade) || normCid(c.nome) === normCid(cidade));
+          if (cidNorm?.idSheet) {
+            // Lê linha atual para preservar fornecedor se já preenchido
+            const linhaRows = await sheetsRead(cidNorm.idSheet, `Produção!A${loc.rowIndex}:N${loc.rowIndex}`, true);
+            let fornecedor = '';
+            if (linhaRows && linhaRows[0]) {
+              // Coluna L = índice 11 (0-based) = posição 12 (1-based)
+              fornecedor = linhaRows[0][11] || '';
             }
+            if (!fornecedor) {
+              const solicRef = solicData.find(s => s._rowIndex === rowIndex);
+              fornecedor = solicRef?.FAVORECIDO || '';
+            }
+            // Atualiza J (valor pago acumulado), K (status), L (fornecedor)
+            await sheetsWrite(cidNorm.idSheet, `Produção!J${loc.rowIndex}:L${loc.rowIndex}`, [[totalPago, novoStatus, fornecedor]]);
+            cacheInvalidate(`${cidNorm.idSheet}::Produção!A:N`);
+
+            // Registra a mudança de status no Alertas & Histórico
+            const histRow = [
+              textoData(agora()), USUARIO.nome, item, cidNorm.nome,
+              loc.status || '', novoStatus, '—', 'Mudança de status',
+              `Pagamento ${novoStatus === 'Pago' ? 'completo' : 'parcial'}: ${formatBRL(valorNovo)}`
+            ];
+            sheetsAppend(SHEET_GERAL, 'Alertas & Histórico!A:I', [histRow]).catch(() => {});
           }
-        } catch (e2) { console.warn('Erro ao atualizar PPP:', e2); }
-      }
+        }
+      } catch (e2) { console.warn('Erro ao atualizar PPP:', e2); }
+
+      // cid usado adiante para WhatsApp
+      const cid = CIDADES.find(c => normCid(c.cidade) === normCid(cidade) || normCid(c.nome) === normCid(cidade));
 
       fecharModal();
       showToast(`Pagamento confirmado — ${novoStatus}!`, 'success');
 
       // WhatsApp → produtores da cidade + FIN001
-      const cidId = cid?.cidade || cidade.toLowerCase();
+      // Princípio 6: normCid para tolerar cidades acentuadas
+      const cidId = cid?.cidade || normCid(cidade);
       usuariosDaCidade(cidId).forEach(u =>
         sendWhatsApp(u.whatsapp, `💰 Pagamento de '${item}' confirmado — ${formatBRL(valorNovo)}.`));
       const fin001 = usuarioPorCodigo('FIN001');
@@ -2702,7 +3025,7 @@ let receitasData = [];
 let recCatsList = [];      // lista de categorias da aba Categorias Receita
 let recCatFiltro = '';
 let recStatusFiltro = '';
-let recCidFiltro = '';
+// Bug #2: recCidFiltro removido — usa CIDADE_ATIVA do topbar
 
 const REC_STATUS = ['Previsto', 'Confirmado', 'Recebido', 'Recebido parcial'];
 
@@ -2788,14 +3111,13 @@ function renderReceitasView(content) {
   // Filtragem por perfil: prod só vê sua cidade
   let dados = receitasData;
   if (p === 'prod') {
-    dados = dados.filter(r => normCid(r.CIDADE) === CIDADE_ATIVA);
+    dados = dados.filter(r => normCid(r.CIDADE) === normCid(CIDADE_ATIVA));
   } else if (CIDADE_ATIVA && CIDADE_ATIVA !== 'todas') {
     // Respeita seletor de cidade do topbar
-    dados = dados.filter(r => normCid(r.CIDADE) === CIDADE_ATIVA);
+    dados = dados.filter(r => normCid(r.CIDADE) === normCid(CIDADE_ATIVA));
   }
 
-  // Filtros locais
-  if (recCidFiltro) dados = dados.filter(r => normCid(r.CIDADE) === recCidFiltro);
+  // Filtros locais (cidade removida em Bug #2 — topbar é a fonte da verdade)
   if (recStatusFiltro) dados = dados.filter(r => r.STATUS === recStatusFiltro);
   if (recCatFiltro) dados = dados.filter(r => r.CATEGORIA === recCatFiltro);
 
@@ -2813,9 +3135,6 @@ function renderReceitasView(content) {
   // Categorias únicas para o filtro (mescla da aba Categorias com as usadas)
   const catsNosDados = [...new Set(dados.map(r => r.CATEGORIA).filter(Boolean))];
   const catsFiltroOpts = [...new Set([...recCatsList, ...catsNosDados])];
-
-  // Cidades para filtro (só faz sentido se p não-prod)
-  const mostrarCidFiltro = p !== 'prod' && cidsVis.length > 1;
 
   content.innerHTML = `
     <div class="metrics-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
@@ -2841,11 +3160,6 @@ function renderReceitasView(content) {
       <div class="section-block-header" style="flex-wrap:wrap;gap:10px">
         <h3>Receitas <span class="badge badge-gray">${dados.length}</span></h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          ${mostrarCidFiltro ? `
-            <select class="filter-select" id="rec-fcid" onchange="setRecFiltro('cid', this.value)">
-              <option value="">Todas as cidades</option>
-              ${cidsVis.map(c => `<option value="${c.cidade}" ${recCidFiltro===c.cidade?'selected':''}>${c.nome}</option>`).join('')}
-            </select>` : ''}
           <select class="filter-select" id="rec-fcat" onchange="setRecFiltro('cat', this.value)">
             <option value="">Todas as categorias</option>
             ${catsFiltroOpts.map(c => `<option value="${c}" ${recCatFiltro===c?'selected':''}>${c}</option>`).join('')}
@@ -2891,7 +3205,7 @@ function renderReceitasView(content) {
 }
 
 function setRecFiltro(tipo, val) {
-  if (tipo === 'cid') recCidFiltro = val;
+  // Bug #2: filtro de cidade ('cid') removido — usa CIDADE_ATIVA do topbar
   if (tipo === 'cat') recCatFiltro = val;
   if (tipo === 'st') recStatusFiltro = val;
   renderReceitasView(document.getElementById('rec-content'));
@@ -3105,7 +3419,7 @@ async function adicionarCategoriaReceita() {
    BLOCO 16 — ALERTAS & HISTÓRICO
 ══════════════════════════════════════════════════════════════ */
 let alertasData = [];
-let alertCidFiltro = '';
+// Bug #2: alertCidFiltro removido — usa CIDADE_ATIVA do topbar
 let alertTipoFiltro = '';
 let alertDtDe = '';
 let alertDtAte = '';
@@ -3147,16 +3461,16 @@ function alertParseDataHora(str) {
 
 function renderAlertasView(content) {
   const p = USUARIO.perfil;
-  const cidsVis = cidadesVisiveis();
 
-  // Filtragem por perfil
+  // Filtragem por perfil + topbar (Bug #2)
   let dados = alertasData;
   if (p === 'prod') {
-    dados = dados.filter(r => normCid(r.CIDADE) === CIDADE_ATIVA);
+    dados = dados.filter(r => normCid(r.CIDADE) === normCid(CIDADE_ATIVA));
+  } else if (CIDADE_ATIVA && CIDADE_ATIVA !== 'todas') {
+    dados = dados.filter(r => normCid(r.CIDADE) === normCid(CIDADE_ATIVA));
   }
 
-  // Filtros locais
-  if (alertCidFiltro) dados = dados.filter(r => normCid(r.CIDADE) === alertCidFiltro);
+  // Filtros locais (cidade removida — Bug #2)
   if (alertTipoFiltro) dados = dados.filter(r => (r.TIPO || '') === alertTipoFiltro);
 
   if (alertDtDe || alertDtAte) {
@@ -3184,18 +3498,11 @@ function renderAlertasView(content) {
   // Tipos únicos para o filtro
   const tipos = [...new Set(alertasData.map(r => r.TIPO).filter(Boolean))].sort();
 
-  const mostrarCidFiltro = p !== 'prod' && cidsVis.length > 1;
-
   content.innerHTML = `
     <div class="section-block">
       <div class="section-block-header" style="flex-wrap:wrap;gap:10px">
         <h3>Trilha de Auditoria <span class="badge badge-gray">${dados.length}</span></h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          ${mostrarCidFiltro ? `
-            <select class="filter-select" id="alert-fcid" onchange="setAlertFiltro('cid', this.value)">
-              <option value="">Todas as cidades</option>
-              ${cidsVis.map(c => `<option value="${c.cidade}" ${alertCidFiltro===c.cidade?'selected':''}>${c.nome}</option>`).join('')}
-            </select>` : ''}
           <select class="filter-select" id="alert-ftipo" onchange="setAlertFiltro('tipo', this.value)">
             <option value="">Todos os tipos</option>
             ${tipos.map(t => `<option value="${t}" ${alertTipoFiltro===t?'selected':''}>${t}</option>`).join('')}
@@ -3249,7 +3556,7 @@ function renderAlertasView(content) {
 }
 
 function setAlertFiltro(tipo, val) {
-  if (tipo === 'cid') alertCidFiltro = val;
+  // Bug #2: filtro de cidade ('cid') removido — usa CIDADE_ATIVA do topbar
   if (tipo === 'tipo') alertTipoFiltro = val;
   if (tipo === 'de') alertDtDe = val;
   if (tipo === 'ate') alertDtAte = val;
@@ -3257,7 +3564,6 @@ function setAlertFiltro(tipo, val) {
 }
 
 function limparFiltrosAlertas() {
-  alertCidFiltro = '';
   alertTipoFiltro = '';
   alertDtDe = '';
   alertDtAte = '';
@@ -3268,7 +3574,7 @@ function limparFiltrosAlertas() {
    BLOCO 17 — DOCUMENTOS
 ══════════════════════════════════════════════════════════════ */
 let docsData = [];
-let docCidFiltro = '';
+// Bug #2: docCidFiltro removido — usa CIDADE_ATIVA do topbar
 let docTipoFiltro = '';
 
 const DOC_TIPOS = ['Contrato', 'NF', 'Orçamento', 'Autorização', 'Relatório', 'Outro'];
@@ -3309,19 +3615,17 @@ async function carregarDocumentos() {
 
 function renderDocumentosView(content) {
   const p = USUARIO.perfil;
-  const cidsVis = cidadesVisiveis();
   const podeEditarTodos = p === 'mestre' || p === 'fin';
 
-  // Filtragem por perfil
+  // Filtragem por perfil + topbar (Bug #2)
   let dados = docsData;
   if (p === 'prod') {
-    dados = dados.filter(r => normCid(r.CIDADE) === CIDADE_ATIVA);
+    dados = dados.filter(r => normCid(r.CIDADE) === normCid(CIDADE_ATIVA));
   } else if (CIDADE_ATIVA && CIDADE_ATIVA !== 'todas') {
-    dados = dados.filter(r => normCid(r.CIDADE) === CIDADE_ATIVA);
+    dados = dados.filter(r => normCid(r.CIDADE) === normCid(CIDADE_ATIVA));
   }
 
-  // Filtros locais
-  if (docCidFiltro) dados = dados.filter(r => normCid(r.CIDADE) === docCidFiltro);
+  // Filtros locais (cidade removida — Bug #2)
   if (docTipoFiltro) dados = dados.filter(r => (r.TIPO || '') === docTipoFiltro);
 
   // Ordena por data desc
@@ -3334,18 +3638,11 @@ function renderDocumentosView(content) {
     return isoB.localeCompare(isoA);
   });
 
-  const mostrarCidFiltro = p !== 'prod' && cidsVis.length > 1;
-
   content.innerHTML = `
     <div class="section-block">
       <div class="section-block-header" style="flex-wrap:wrap;gap:10px">
         <h3>Documentos <span class="badge badge-gray">${dados.length}</span></h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          ${mostrarCidFiltro ? `
-            <select class="filter-select" id="doc-fcid" onchange="setDocFiltro('cid', this.value)">
-              <option value="">Todas as cidades</option>
-              ${cidsVis.map(c => `<option value="${c.cidade}" ${docCidFiltro===c.cidade?'selected':''}>${c.nome}</option>`).join('')}
-            </select>` : ''}
           <select class="filter-select" id="doc-ftipo" onchange="setDocFiltro('tipo', this.value)">
             <option value="">Todos os tipos</option>
             ${DOC_TIPOS.map(t => `<option value="${t}" ${docTipoFiltro===t?'selected':''}>${t}</option>`).join('')}
@@ -3395,7 +3692,7 @@ function renderDocumentosView(content) {
 }
 
 function setDocFiltro(tipo, val) {
-  if (tipo === 'cid') docCidFiltro = val;
+  // Bug #2: filtro de cidade ('cid') removido — usa CIDADE_ATIVA do topbar
   if (tipo === 'tipo') docTipoFiltro = val;
   renderDocumentosView(document.getElementById('doc-content'));
 }
