@@ -345,9 +345,9 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     </div>
     <div class="form-group">
       <label>Código de acesso</label>
-      <input type="text" id="loginCode" placeholder="Ex: MESTRE01" autocomplete="off"
+      <input type="text" id="loginCode" autocomplete="off"
              autocapitalize="characters" style="text-transform:uppercase" maxlength="20"
-             onkeydown="if(event.key==='Enter') doLogin()" placeholder="">
+             onkeydown="if(event.key==='Enter') doLogin()">
     </div>
     <button class="btn-login" id="btnLogin" onclick="doLogin()">Entrar</button>
     <div class="login-error" id="loginError"></div>
@@ -399,7 +399,6 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <h1>Dashboard</h1>
       <p id="dashSubtitle">Visão geral da produção</p>
     </div>
-    <div class="city-tabs" id="dashCityTabs"></div>
     <div id="dashContent">
       <div class="loading-state"><div class="spinner"></div><span>Carregando métricas...</span></div>
     </div>
@@ -808,15 +807,16 @@ function renderTopbarCidade() {
   const visib = cidadesVisiveis();
 
   if (USUARIO.perfil === 'prod' && USUARIO.cidade) {
-    // Produtor: mostra badge fixo
+    // Produtor: badge fixo
     badge.textContent = cidadeNome(USUARIO.cidade).toUpperCase();
     badge.style.display = 'inline-flex';
     sel.style.display = 'none';
   } else if (visib.length > 1) {
-    // mestre/fin: select com todas
-    sel.innerHTML = visib.map(c =>
-      `<option value="${c.cidade}" ${c.cidade === CIDADE_ATIVA ? 'selected' : ''}>${c.nome}</option>`
-    ).join('');
+    // mestre/fin: select com "Todas" + cidades
+    const temTodas = USUARIO.perfil === 'mestre' || USUARIO.perfil === 'fin';
+    if (!CIDADE_ATIVA && temTodas) CIDADE_ATIVA = 'todas';
+    sel.innerHTML = (temTodas ? `<option value="todas" ${CIDADE_ATIVA === 'todas' ? 'selected' : ''}>Todas as cidades</option>` : '') +
+      visib.map(c => `<option value="${c.cidade}" ${c.cidade === CIDADE_ATIVA ? 'selected' : ''}>${c.nome}</option>`).join('');
     sel.style.display = 'block';
     badge.style.display = 'none';
   } else if (visib.length === 1) {
@@ -922,119 +922,146 @@ function onTabChange(tabId) {
 /* ══════════════════════════════════════════════════════════════
    BLOCO 10 — DASHBOARD
 ══════════════════════════════════════════════════════════════ */
-let dashCidadeAtiva = '';
 
-async function renderDashboard() {
-  const visib = cidadesVisiveis();
-  if (!dashCidadeAtiva && visib.length > 0) dashCidadeAtiva = visib[0].cidade;
+// Status válidos (ignora lixo como "350", strings numéricas, etc)
+const STATUS_VALIDOS = new Set([
+  'Pendente','Orçado','Pagamento solicitado','Pagamento aprovado',
+  'Solicitado a MeuBilhete','Pago parcial','Pago','Item cancelado'
+]);
 
-  // City tabs
-  const tabsEl = document.getElementById('dashCityTabs');
-  if (visib.length > 1) {
-    tabsEl.innerHTML = visib.map(c => `
-      <div class="city-tab ${c.cidade === dashCidadeAtiva ? 'active' : ''}"
-           onclick="selectDashCity('${c.cidade}')">
-        ${c.nome}
-      </div>
-    `).join('');
-    tabsEl.style.display = 'flex';
-  } else {
-    tabsEl.style.display = 'none';
+// Cores por status para os cards
+function statusColor(st) {
+  if (st === 'Pago') return 'var(--green)';
+  if (st === 'Pago parcial') return 'var(--green)';
+  if (st === 'Pagamento aprovado' || st === 'Pagamento solicitado') return 'var(--blue)';
+  if (st === 'Orçado') return 'var(--accent)';
+  if (st === 'Item cancelado') return 'var(--red)';
+  return 'var(--text2)';
+}
+
+async function carregarProducao(sheetId) {
+  const rows = await sheetsRead(sheetId, 'Produção!A:N');
+  if (!rows || rows.length < 2) return null;
+
+  const COL = { CAT:0, ITEM:1, QNT:2, DIAS:3, DT_INI:4, UNIT:5, CUSTO25:6, TOTAL26:7, DIFF:8, PAGO:9, STATUS:10 };
+  const data = rows.slice(1).filter(r => r.some(c => c));
+
+  let totalOrcado = 0, totalPago = 0, totalCusto25 = 0;
+  let countItens = 0;
+  const porCategoria = {};
+  const statusCount = {};
+
+  for (const row of data) {
+    const status = (row[COL.STATUS] || '').trim();
+    const cat = (row[COL.CAT] || '').trim();
+
+    // Ignora linhas sem status, sem categoria, cabeçalho repetido ou status inválido
+    if (!status || !cat || cat === 'CATEGORIA' || !STATUS_VALIDOS.has(status)) continue;
+
+    const total26 = parseBRL(row[COL.TOTAL26]);
+    const pago = parseBRL(row[COL.PAGO]);
+    const custo25 = parseBRL(row[COL.CUSTO25]);
+
+    countItens++;
+    totalOrcado += total26;
+    totalPago += pago;
+    totalCusto25 += custo25;
+
+    statusCount[status] = (statusCount[status] || 0) + 1;
+
+    if (!porCategoria[cat]) porCategoria[cat] = { orcado: 0, pago: 0, custo25: 0, itens: 0 };
+    porCategoria[cat].orcado += total26;
+    porCategoria[cat].pago += pago;
+    porCategoria[cat].custo25 += custo25;
+    porCategoria[cat].itens++;
   }
 
+  return { totalOrcado, totalPago, totalCusto25, countItens, porCategoria, statusCount };
+}
+
+async function renderDashboard() {
   const content = document.getElementById('dashContent');
-  content.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>Carregando dados de ${cidadeNome(dashCidadeAtiva)}...</span></div>`;
+  const cidadeLabel = CIDADE_ATIVA === 'todas' ? 'Todas as cidades' : cidadeNome(CIDADE_ATIVA);
+
+  content.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>Carregando dados — ${cidadeLabel}...</span></div>`;
 
   try {
-    const sheetId = cidadeSheet(dashCidadeAtiva);
-    if (!sheetId) {
-      content.innerHTML = renderDashEmpty('Planilha não configurada para esta cidade.');
-      return;
-    }
-
-    const rows = await sheetsRead(sheetId, 'Produção!A:N');
-
-    if (!rows || rows.length < 2) {
-      content.innerHTML = renderDashEmpty('Nenhum dado encontrado na aba Produção.');
-      return;
-    }
-
-    const header = rows[0];
-    const data = rows.slice(1).filter(r => r.some(c => c));
-
-    // Mapeamento das colunas (posicional conforme briefing)
-    // A=CATEGORIA B=ITEM C=QNT D=DIAS E=DATA INÍCIO F=VALOR UNIT G=CUSTO2025 H=TOTAL2026
-    // I=DIFERENÇA J=VALOR PAGO K=STATUS L=FORNECEDOR M=OBS N=SUBCATEGORIA
-    const COL = { CAT:0, ITEM:1, QNT:2, DIAS:3, DT_INI:4, UNIT:5, CUSTO25:6, TOTAL26:7, DIFF:8, PAGO:9, STATUS:10, FORN:11, OBS:12, SUBCAT:13 };
-
-    let totalOrcado = 0, totalPago = 0, totalPendente = 0;
-    let countItens = 0, countPagos = 0, countPendentes = 0, countOrcados = 0;
+    let totalOrcado = 0, totalPago = 0, totalCusto25 = 0, countItens = 0;
     const porCategoria = {};
     const statusCount = {};
 
-    for (const row of data) {
-      const total26 = parseBRL(row[COL.TOTAL26]);
-      const pago = parseBRL(row[COL.PAGO]);
-      const status = (row[COL.STATUS] || '').trim();
-      const cat = (row[COL.CAT] || 'Sem categoria').trim();
-
-      if (!cat || cat === 'CATEGORIA') continue; // pula cabeçalho eventual
-      countItens++;
-      totalOrcado += total26;
-      totalPago += pago;
-
-      if (status === 'Pendente' || status === '') countPendentes++;
-      else if (status === 'Pago') countPagos++;
-      else if (status === 'Orçado') countOrcados++;
-
-      statusCount[status] = (statusCount[status] || 0) + 1;
-
-      if (!porCategoria[cat]) porCategoria[cat] = { orcado: 0, pago: 0, itens: 0 };
-      porCategoria[cat].orcado += total26;
-      porCategoria[cat].pago += pago;
-      porCategoria[cat].itens++;
+    if (CIDADE_ATIVA === 'todas') {
+      // Soma todas as cidades em paralelo
+      const resultados = await Promise.all(
+        CIDADES.map(c => c.idSheet ? carregarProducao(c.idSheet).catch(() => null) : Promise.resolve(null))
+      );
+      for (const r of resultados) {
+        if (!r) continue;
+        totalOrcado += r.totalOrcado;
+        totalPago += r.totalPago;
+        totalCusto25 += r.totalCusto25;
+        countItens += r.countItens;
+        for (const [cat, v] of Object.entries(r.porCategoria)) {
+          if (!porCategoria[cat]) porCategoria[cat] = { orcado:0, pago:0, custo25:0, itens:0 };
+          porCategoria[cat].orcado += v.orcado;
+          porCategoria[cat].pago += v.pago;
+          porCategoria[cat].custo25 += v.custo25;
+          porCategoria[cat].itens += v.itens;
+        }
+        for (const [st, cnt] of Object.entries(r.statusCount)) {
+          statusCount[st] = (statusCount[st] || 0) + cnt;
+        }
+      }
+    } else {
+      const sheetId = cidadeSheet(CIDADE_ATIVA);
+      if (!sheetId) { content.innerHTML = renderDashEmpty('Planilha não configurada para esta cidade.'); return; }
+      const r = await carregarProducao(sheetId);
+      if (!r) { content.innerHTML = renderDashEmpty('Nenhum dado encontrado na aba Produção.'); return; }
+      totalOrcado = r.totalOrcado; totalPago = r.totalPago;
+      totalCusto25 = r.totalCusto25; countItens = r.countItens;
+      Object.assign(porCategoria, r.porCategoria);
+      Object.assign(statusCount, r.statusCount);
     }
 
-    totalPendente = totalOrcado - totalPago;
+    const totalPendente = totalOrcado - totalPago;
     const pctPago = totalOrcado > 0 ? (totalPago / totalOrcado * 100) : 0;
-
-    // Ordena categorias por orçado desc
     const cats = Object.entries(porCategoria).sort((a,b) => b[1].orcado - a[1].orcado);
+    const statusEntries = Object.entries(statusCount).sort((a,b) => b[1]-a[1]);
 
     content.innerHTML = `
-      <!-- Métricas principais -->
+      <!-- Cards principais -->
       <div class="cards-grid">
         <div class="metric-card accent">
-          <div class="metric-icon">💰</div>
-          <div class="metric-label">Orçamento Total 2026</div>
+          <div class="metric-icon">📋</div>
+          <div class="metric-label">Orçamento 2026</div>
           <div class="metric-value sm">${formatBRL(totalOrcado)}</div>
-          <div class="metric-sub">${countItens} itens no planejamento</div>
+          <div class="metric-sub">${countItens} itens com status</div>
         </div>
         <div class="metric-card green">
           <div class="metric-icon">✅</div>
           <div class="metric-label">Total Pago</div>
           <div class="metric-value sm">${formatBRL(totalPago)}</div>
-          <div class="progress-wrap"><div class="progress-bar green" style="width:${pctPago.toFixed(1)}%"></div></div>
+          <div class="progress-wrap"><div class="progress-bar green" style="width:${Math.min(pctPago,100).toFixed(1)}%"></div></div>
           <div class="metric-sub">${pctPago.toFixed(1)}% do orçamento</div>
         </div>
         <div class="metric-card red">
           <div class="metric-icon">⏳</div>
           <div class="metric-label">Saldo a Pagar</div>
           <div class="metric-value sm">${formatBRL(totalPendente)}</div>
-          <div class="metric-sub">${countPendentes} itens pendentes</div>
+          <div class="metric-sub">${formatBRL(totalOrcado)} − ${formatBRL(totalPago)}</div>
         </div>
-        <div class="metric-card blue">
-          <div class="metric-icon">🎯</div>
-          <div class="metric-label">Itens Pagos</div>
-          <div class="metric-value">${countPagos}</div>
-          <div class="metric-sub">de ${countItens} itens totais</div>
+        <div class="metric-card" style="border-color:var(--border)">
+          <div class="metric-icon" style="opacity:0.3">📅</div>
+          <div class="metric-label" style="color:var(--text3)">Referência 2025</div>
+          <div class="metric-value sm" style="color:var(--text3);font-size:18px">${formatBRL(totalCusto25)}</div>
+          <div class="metric-sub">custo do ano anterior</div>
         </div>
       </div>
 
       <!-- Por categoria -->
       <div class="section-block">
         <div class="section-block-header">
-          <h3>Orçamento por Categoria — ${cidadeNome(dashCidadeAtiva)}</h3>
+          <h3>Orçamento por Categoria — ${cidadeLabel}</h3>
           <span class="badge badge-gray">${cats.length} categorias</span>
         </div>
         <div class="table-wrap">
@@ -1043,6 +1070,7 @@ async function renderDashboard() {
               <tr>
                 <th>Categoria</th>
                 <th>Itens</th>
+                <th>2025 <span style="font-weight:400;opacity:0.5">(ref)</span></th>
                 <th>Orçado 2026</th>
                 <th>Pago</th>
                 <th>Saldo</th>
@@ -1050,42 +1078,47 @@ async function renderDashboard() {
               </tr>
             </thead>
             <tbody>
-              ${cats.length === 0 ? `<tr><td colspan="6" style="text-align:center;color:var(--text3)">Nenhuma categoria</td></tr>` :
-                cats.map(([cat, v]) => {
-                  const pct = v.orcado > 0 ? (v.pago / v.orcado * 100) : 0;
-                  const saldo = v.orcado - v.pago;
-                  const barClass = pct >= 100 ? 'green' : pct > 50 ? 'accent' : 'red';
-                  return `
-                    <tr>
-                      <td class="text-main">${cat}</td>
-                      <td>${v.itens}</td>
-                      <td>${formatBRL(v.orcado)}</td>
-                      <td style="color:var(--green)">${formatBRL(v.pago)}</td>
-                      <td style="color:${saldo > 0 ? 'var(--red)' : 'var(--green)'}">${formatBRL(saldo)}</td>
-                      <td style="min-width:100px">
-                        <div class="progress-wrap"><div class="progress-bar ${barClass}" style="width:${Math.min(pct,100).toFixed(1)}%"></div></div>
-                        <div style="font-size:11px;color:var(--text3);margin-top:3px">${pct.toFixed(1)}%</div>
-                      </td>
-                    </tr>
-                  `;
-                }).join('')
+              ${cats.length === 0
+                ? `<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:24px">Nenhum item com status válido</td></tr>`
+                : cats.map(([cat, v]) => {
+                    const pct = v.orcado > 0 ? (v.pago / v.orcado * 100) : 0;
+                    const saldo = v.orcado - v.pago;
+                    const barClass = pct >= 100 ? 'green' : pct > 50 ? 'accent' : 'red';
+                    return `
+                      <tr>
+                        <td class="text-main">${cat}</td>
+                        <td>${v.itens}</td>
+                        <td style="color:var(--text3)">${formatBRL(v.custo25)}</td>
+                        <td>${formatBRL(v.orcado)}</td>
+                        <td style="color:var(--green)">${formatBRL(v.pago)}</td>
+                        <td style="color:${saldo > 0 ? 'var(--red)' : 'var(--green)'}">${formatBRL(saldo)}</td>
+                        <td style="min-width:110px">
+                          <div class="progress-wrap"><div class="progress-bar ${barClass}" style="width:${Math.min(pct,100).toFixed(1)}%"></div></div>
+                          <div style="font-size:11px;color:var(--text3);margin-top:3px">${pct.toFixed(1)}%</div>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')
               }
             </tbody>
           </table>
         </div>
       </div>
 
-      <!-- Status breakdown -->
+      <!-- Itens por status -->
       <div class="section-block">
         <div class="section-block-header"><h3>Itens por Status</h3></div>
         <div class="section-block-body">
           <div style="display:flex;flex-wrap:wrap;gap:12px">
-            ${Object.entries(statusCount).sort((a,b)=>b[1]-a[1]).map(([st, cnt]) => `
-              <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:14px 20px;min-width:150px">
-                <div style="font-size:22px;font-weight:700;color:var(--text)">${cnt}</div>
-                <div style="font-size:11px;color:var(--text3);margin-top:4px">${st || 'Sem status'}</div>
-              </div>
-            `).join('')}
+            ${statusEntries.length === 0
+              ? `<p style="color:var(--text3)">Nenhum item</p>`
+              : statusEntries.map(([st, cnt]) => `
+                  <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:14px 20px;min-width:160px">
+                    <div style="font-size:24px;font-weight:700;color:${statusColor(st)}">${cnt}</div>
+                    <div style="font-size:11px;color:var(--text3);margin-top:4px">${st}</div>
+                  </div>
+                `).join('')
+            }
           </div>
         </div>
       </div>
@@ -1097,11 +1130,6 @@ async function renderDashboard() {
 
 function renderDashEmpty(msg) {
   return `<div class="empty-state"><div class="icon">📭</div><p>${msg}</p></div>`;
-}
-
-function selectDashCity(cidadeId) {
-  dashCidadeAtiva = cidadeId;
-  renderDashboard();
 }
 
 /* ══════════════════════════════════════════════════════════════
