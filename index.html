@@ -358,13 +358,23 @@ select.filter-select:focus { border-color: var(--accent); }
 /* ── TABLE STICKY ── */
 .table-prod-wrap { overflow-x: auto; }
 .table-prod-wrap table { min-width: 900px; }
+/* Scroll espelhado no topo */
+.table-scroll-top { overflow-x: auto; overflow-y: hidden; height: 12px; }
+.table-scroll-top-inner { height: 1px; }
+/* Thead congelado */
+.table-prod-wrap thead th { position: sticky; top: 0; background: var(--bg2); z-index: 2; }
 .table-prod-wrap th:first-child,
 .table-prod-wrap td:first-child { position: sticky; left: 0; background: var(--bg2); z-index: 1; }
+.table-prod-wrap thead th:first-child { z-index: 3; }
 .table-prod-wrap tr:hover td:first-child { background: var(--bg3); }
 td.total-col { color: var(--accent); font-weight: 700; }
 tfoot td { font-weight: 700; color: var(--text); border-top: 2px solid var(--border2); padding: 10px 14px; }
+tfoot td:first-child { position: sticky; left: 0; background: var(--bg2); z-index: 1; }
 .btn-icon { background: none; border: none; cursor: pointer; padding: 4px 7px; border-radius: 4px; font-size: 14px; transition: background var(--transition); }
 .btn-icon:hover { background: var(--bg4); }
+/* Item cancelado riscado */
+tr.cancelado td { text-decoration: line-through; opacity: 0.5; }
+tr.cancelado td:last-child { text-decoration: none; opacity: 1; }
 
 /* ── MODAL GLOBAL ── */
 #modal {
@@ -421,6 +431,17 @@ input:checked + .slider:before { transform: translateX(18px); background: var(--
 .revisao-item { background: var(--bg3); border-radius: var(--radius-sm); padding: 10px 14px; }
 .revisao-label { font-size: 10px; color: var(--text3); text-transform: uppercase; font-weight: 600; letter-spacing: 0.08em; margin-bottom: 4px; }
 .revisao-value { font-size: 13px; color: var(--text); font-weight: 500; }
+
+/* ── LINHA CLICÁVEL ── */
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--accent-dim) !important; }
+
+/* ── DETALHE SOLICITAÇÃO ── */
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.detail-item { background: var(--bg3); border-radius: var(--radius-sm); padding: 10px 14px; }
+.detail-label { font-size: 10px; color: var(--text3); text-transform: uppercase; font-weight: 600; letter-spacing: 0.08em; margin-bottom: 3px; }
+.detail-value { font-size: 13px; color: var(--text); font-weight: 500; word-break: break-word; }
+.detail-value.mono { font-family: monospace; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -1356,6 +1377,8 @@ const STATUS_PROD = [
   'Pendente','Orçado','Pagamento solicitado','Pagamento aprovado',
   'Solicitado a MeuBilhete','Pago parcial','Pago','Item cancelado'
 ];
+// Status disponíveis para criar/editar manualmente
+const STATUS_PROD_EDIT = ['Pendente', 'Orçado', 'Item cancelado'];
 
 function podEditarProd() {
   return USUARIO.perfil === 'mestre' || USUARIO.perfil === 'prod';
@@ -1425,7 +1448,7 @@ async function carregarDadosProd() {
       const obj = rowToObj(header, row);
       obj._rowIndex = i + 2;
       return obj;
-    }).filter(r => r.CATEGORIA && r.CATEGORIA !== 'CATEGORIA');
+    }).filter(r => r.CATEGORIA && r.CATEGORIA !== 'CATEGORIA' && r['STATUS'] && r['STATUS'].trim() !== '');
     renderProdPills();
     renderProdTabela();
   } catch (e) {
@@ -1482,7 +1505,11 @@ function renderProdTabela() {
   const canEdit = podEditarProd();
 
   wrap.innerHTML = `
-    <table>
+    <div class="table-scroll-top" id="prod-scroll-top" onscroll="syncScrollProd('top')">
+      <div class="table-scroll-top-inner" id="prod-scroll-top-inner"></div>
+    </div>
+    <div class="table-prod-wrap" id="prod-scroll-bot" onscroll="syncScrollProd('bot')">
+    <table id="prod-table-el">
       <thead>
         <tr>
           <th>Item</th>
@@ -1508,8 +1535,9 @@ function renderProdTabela() {
           const c25   = parseBRL(r['CUSTO 2025 (R$)'] || 0);
           const diff  = parseBRL(r['DIFERENÇA (R$)'] || 0);
           const st    = r['STATUS'] || '';
+          const cancelado = st === 'Item cancelado';
           return `
-          <tr>
+          <tr class="${cancelado ? 'cancelado' : ''}">
             <td class="text-main">${r.ITEM || '—'}</td>
             <td>${r.CATEGORIA || '—'}</td>
             <td>${r.SUBCATEGORIA || '—'}</td>
@@ -1523,7 +1551,7 @@ function renderProdTabela() {
             <td style="color:var(--green)">${formatBRL(pago)}</td>
             <td><span class="badge ${badgeProdStatus(st)}">${st || '—'}</span></td>
             <td>${r['FORNECEDOR'] || '—'}</td>
-            ${canEdit ? `<td><button class="btn-icon" title="Editar" onclick='abrirModalProd(${r._rowIndex})'>✏️</button></td>` : ''}
+            ${canEdit ? `<td><button class="btn-icon" title="Editar" onclick='event.stopPropagation();abrirModalProd(${r._rowIndex})'>✏️</button></td>` : ''}
           </tr>`;
         }).join('')}
       </tbody>
@@ -1538,7 +1566,14 @@ function renderProdTabela() {
         </tr>
       </tfoot>
     </table>
+    </div>
   `;
+  // Sincroniza largura do scroll superior
+  requestAnimationFrame(() => {
+    const table = document.getElementById('prod-table-el');
+    const topInner = document.getElementById('prod-scroll-top-inner');
+    if (table && topInner) topInner.style.width = table.scrollWidth + 'px';
+  });
 }
 
 function badgeProdStatus(st) {
@@ -1548,6 +1583,19 @@ function badgeProdStatus(st) {
   if (st === 'Orçado') return 'badge-accent';
   if (st === 'Item cancelado') return 'badge-red';
   return 'badge-gray';
+}
+
+let _syncScrollLock = false;
+function syncScrollProd(origem) {
+  if (_syncScrollLock) return;
+  _syncScrollLock = true;
+  const top = document.getElementById('prod-scroll-top');
+  const bot = document.getElementById('prod-scroll-bot');
+  if (top && bot) {
+    if (origem === 'top') bot.scrollLeft = top.scrollLeft;
+    else top.scrollLeft = bot.scrollLeft;
+  }
+  _syncScrollLock = false;
 }
 
 function abrirModalProd(rowIndex) {
@@ -1616,11 +1664,13 @@ function abrirModalProd(rowIndex) {
         <input class="form-control" id="pf-forn" value="${item['FORNECEDOR']||''}" placeholder="Nome do fornecedor">
       </div>
       <div class="form-group">
-        <label>Status</label>
-        <select class="form-control" id="pf-status">
-          ${STATUS_PROD.map(s => `<option value="${s}" ${(item['STATUS']||'Pendente')===s?'selected':''}>${s}</option>`).join('')}
-        </select>
-      </div>
+          <label>Status</label>
+          <select class="form-control" id="pf-status">
+            ${STATUS_PROD_EDIT.map(s => `<option value="${s}" ${(item['STATUS']||'Pendente')===s?'selected':''}>${s}</option>`).join('')}
+            ${!STATUS_PROD_EDIT.includes(item['STATUS']||'') && item['STATUS'] ? `<option value="${item['STATUS']}" selected disabled style="color:var(--text3)">${item['STATUS']} (gerenciado pelo sistema)</option>` : ''}
+          </select>
+          <span style="font-size:11px;color:var(--text3);margin-top:4px">Demais status são atualizados automaticamente pelo fluxo de pagamento.</span>
+        </div>
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -1757,7 +1807,7 @@ function renderSolicTabela(content) {
   // Filtra por perfil
   let dados = solicData;
   if (p === 'prod') dados = dados.filter(r => (r.CIDADE||'').toLowerCase() === CIDADE_ATIVA);
-  if (p === 'socio') dados = dados.filter(r => r.SOLICITANTE === USUARIO.nome);
+  // socio vê todas (como mestre e fin) — removida restrição anterior
 
   // Filtros ativos
   if (solicFiltroSt) dados = dados.filter(r => r.STATUS === solicFiltroSt);
@@ -1769,14 +1819,14 @@ function renderSolicTabela(content) {
   content.innerHTML = `
     <div class="section-block">
       <div class="section-block-header" style="flex-wrap:wrap;gap:10px">
-        <h3>Histórico de Solicitações</h3>
+        <h3>Histórico de Solicitações <span class="badge badge-gray">${dados.length}</span></h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           ${mostrarCidFiltro ? `
-            <select class="filter-select" onchange="setSolicFiltro('cid',this.value)">
+            <select class="filter-select" id="sf-filtro-cid" onchange="setSolicFiltro('cid',this.value)">
               <option value="">Todas as cidades</option>
               ${cids.map(c => `<option value="${c.cidade}" ${solicFiltroCid===c.cidade?'selected':''}>${c.nome}</option>`).join('')}
             </select>` : ''}
-          <select class="filter-select" onchange="setSolicFiltro('st',this.value)">
+          <select class="filter-select" id="sf-filtro-st" onchange="setSolicFiltro('st',this.value)">
             <option value="">Todos os status</option>
             ${statusList.map(s => `<option value="${s}" ${solicFiltroSt===s?'selected':''}>${s}</option>`).join('')}
           </select>
@@ -1787,23 +1837,25 @@ function renderSolicTabela(content) {
         : `<div class="table-wrap"><table>
             <thead><tr>
               <th>Data</th><th>Cidade</th><th>Solicitante</th><th>Item</th>
-              <th>Valor</th><th>Parcela</th><th>Status</th>
+              <th>Valor</th><th>Parcela</th><th>Favorecido</th><th>Status</th>
             </tr></thead>
             <tbody>
-              ${dados.map(r => `
-                <tr>
+              ${dados.map((r,i) => `
+                <tr class="clickable" onclick="abrirDetalheSolic(${r._rowIndex})" title="Clique para ver detalhes">
                   <td>${r.DATA||'—'}</td>
                   <td>${r.CIDADE||'—'}</td>
                   <td>${r.SOLICITANTE||'—'}</td>
                   <td class="text-main">${r.ITEM||'—'}</td>
                   <td>${formatBRL(parseBRL(r['VALOR SOLICITADO (R$)']||0))}</td>
                   <td>${r.PARCELAS||'à vista'}</td>
+                  <td>${r.FAVORECIDO||'—'}</td>
                   <td><span class="badge ${badgeSolicStatus(r.STATUS)}">${r.STATUS||'—'}</span></td>
                 </tr>`).join('')}
             </tbody>
           </table></div>`
       }
     </div>
+    <p style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center">💡 Clique em qualquer linha para ver detalhes completos da solicitação</p>
   `;
 }
 
@@ -1820,6 +1872,55 @@ function badgeSolicStatus(st) {
   if (st === 'Pagamento aprovado' || st === 'Solicitado a MeuBilhete') return 'badge-blue';
   if (st === 'Em aberto') return 'badge-accent';
   return 'badge-gray';
+}
+
+function abrirDetalheSolic(rowIndex) {
+  const r = solicData.find(x => x._rowIndex === rowIndex);
+  if (!r) return;
+  const st = r.STATUS || '—';
+  const valorSol = parseBRL(r['VALOR SOLICITADO (R$)'] || 0);
+  const valorPago = parseBRL(r['VALOR PAGO (R$)'] || 0);
+  const html = `
+    <div style="margin-bottom:14px;display:flex;align-items:center;gap:10px">
+      <span class="badge ${badgeSolicStatus(st)}" style="font-size:12px;padding:4px 14px">${st}</span>
+      <span style="font-size:20px;font-weight:700;color:var(--accent)">${formatBRL(valorSol)}</span>
+    </div>
+    <div class="detail-grid">
+      <div class="detail-item"><div class="detail-label">Data</div><div class="detail-value">${r.DATA||'—'}</div></div>
+      <div class="detail-item"><div class="detail-label">Cidade</div><div class="detail-value">${r.CIDADE||'—'}</div></div>
+      <div class="detail-item"><div class="detail-label">Solicitante</div><div class="detail-value">${r.SOLICITANTE||'—'}</div></div>
+      <div class="detail-item"><div class="detail-label">WhatsApp</div><div class="detail-value">${r.WHATSAPP||'—'}</div></div>
+      <div class="detail-item"><div class="detail-label">Categoria</div><div class="detail-value">${r.CATEGORIA||'—'}</div></div>
+      <div class="detail-item"><div class="detail-label">Item</div><div class="detail-value">${r.ITEM||'—'}</div></div>
+    </div>
+    <div class="detail-item" style="margin-bottom:10px"><div class="detail-label">Descrição / Justificativa</div><div class="detail-value">${r['DESCRIÇÃO / JUSTIFICATIVA']||r['DESCRIÇÃO']||'—'}</div></div>
+    <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.1em;margin:14px 0 8px">Dados Financeiros</div>
+    <div class="detail-grid">
+      <div class="detail-item"><div class="detail-label">Favorecido</div><div class="detail-value">${r.FAVORECIDO||'—'}</div></div>
+      <div class="detail-item"><div class="detail-label">Parcela</div><div class="detail-value">${r.PARCELAS||'à vista'}</div></div>
+      ${r.PIX ? `<div class="detail-item" style="grid-column:1/-1"><div class="detail-label">PIX</div><div class="detail-value mono">${r.PIX}</div></div>` : ''}
+      ${r.BANCO ? `<div class="detail-item"><div class="detail-label">Banco</div><div class="detail-value">${r.BANCO} · Ag ${r['AGÊNCIA']||''} · Cc ${r.CONTA||''}</div></div>` : ''}
+      <div class="detail-item"><div class="detail-label">Custo 2026 (ref)</div><div class="detail-value">${formatBRL(parseBRL(r['CUSTO 2026 (R$)']||0))}</div></div>
+    </div>
+    ${st === 'Pago' || st === 'Pago parcial' ? `
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.1em;margin:14px 0 8px">Pagamento</div>
+      <div class="detail-grid">
+        <div class="detail-item"><div class="detail-label">Pago por</div><div class="detail-value">${r['PAGO POR']||'—'}</div></div>
+        <div class="detail-item"><div class="detail-label">Data Pagamento</div><div class="detail-value">${r['DATA PAGAMENTO']||'—'}</div></div>
+        <div class="detail-item"><div class="detail-label">Valor Pago</div><div class="detail-value" style="color:var(--green);font-weight:700">${formatBRL(valorPago)}</div></div>
+        ${r['OBS / COMPROVANTE'] ? `<div class="detail-item"><div class="detail-label">Comprovante</div><div class="detail-value"><a href="${r['OBS / COMPROVANTE']}" target="_blank" style="color:var(--blue)">Ver comprovante ↗</a></div></div>` : ''}
+      </div>` : ''}
+    ${r['OBS / COMPROVANTE'] && st !== 'Pago' && st !== 'Pago parcial' ? `
+      <div class="detail-item" style="margin-top:10px"><div class="detail-label">Observações</div><div class="detail-value">${r['OBS / COMPROVANTE']}</div></div>` : ''}
+    ${st === 'Rejeitado' && r['OBS / COMPROVANTE'] ? `
+      <div class="detail-item" style="margin-top:10px;border:1px solid rgba(229,83,83,0.3)"><div class="detail-label" style="color:var(--red)">Motivo da Rejeição</div><div class="detail-value">${r['OBS / COMPROVANTE']}</div></div>` : ''}
+    ${r['APROVADO POR'] ? `
+      <div style="font-size:11px;color:var(--text3);margin-top:14px">Aprovado por <strong>${r['APROVADO POR']}</strong> em ${r['DATA APROVAÇÃO']||'—'}</div>` : ''}
+    <div style="display:flex;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+      <button class="btn btn-secondary" onclick="fecharModal()">Fechar</button>
+    </div>
+  `;
+  abrirModal(`Solicitação — ${r.ITEM||''}`, html, true);
 }
 
 function abrirFormSolicitacao() {
@@ -1861,6 +1962,12 @@ function renderSolicStep1() {
   const p = USUARIO.perfil;
   const cids = cidadesVisiveis();
   const f = _solicForm;
+
+  // Categorias e itens orçados da produção (cidade selecionada)
+  const cidSel = p === 'prod' ? CIDADE_ATIVA : (f.cidade || cids[0]?.cidade || '');
+  const itensOrcados = prodData.filter(r => r['STATUS'] === 'Orçado');
+  const cats = [...new Set(itensOrcados.map(r => r.CATEGORIA).filter(Boolean))];
+
   return `
     <div class="step-pane active">
       <div class="form-row">
@@ -1868,19 +1975,34 @@ function renderSolicStep1() {
           <label>Cidade *</label>
           ${p === 'prod'
             ? `<input class="form-control" readonly value="${cidadeNome(CIDADE_ATIVA)}">`
-            : `<select class="form-control" id="sf-cidade">
-                ${cids.map(c => `<option value="${c.cidade}" ${(f.cidade||cids[0]?.cidade)===c.cidade?'selected':''}>${c.nome}</option>`).join('')}
+            : `<select class="form-control" id="sf-cidade" onchange="onSolicCidadeChange(this.value)">
+                ${cids.map(c => `<option value="${c.cidade}" ${cidSel===c.cidade?'selected':''}>${c.nome}</option>`).join('')}
               </select>`}
         </div>
       </div>
       <div class="form-row col2">
         <div class="form-group">
           <label>Categoria *</label>
-          <input class="form-control" id="sf-cat" value="${f.categoria||''}" placeholder="ex: Som e Luz">
+          <select class="form-control" id="sf-cat" onchange="onSolicCatChange(this.value)">
+            <option value="">Selecione a categoria</option>
+            ${cats.map(c => `<option value="${c}" ${f.categoria===c?'selected':''}>${c}</option>`).join('')}
+            <option value="__outro__" ${!cats.includes(f.categoria) && f.categoria ? 'selected' : ''}>Outra (digitar)</option>
+          </select>
+          <input class="form-control" id="sf-cat-custom" style="margin-top:6px;display:${(!cats.includes(f.categoria||'') && f.categoria) ? 'block' : 'none'}"
+            value="${(!cats.includes(f.categoria||'') && f.categoria) ? f.categoria : ''}" placeholder="Digite a categoria">
         </div>
         <div class="form-group">
-          <label>Item *</label>
-          <input class="form-control" id="sf-item" value="${f.item||''}" placeholder="Nome do item">
+          <label>Item * <span style="font-size:10px;color:var(--accent);font-weight:400">(apenas itens com status Orçado)</span></label>
+          <select class="form-control" id="sf-item-sel" onchange="onSolicItemChange(this.value)">
+            <option value="">Selecione o item</option>
+            ${itensOrcados
+              .filter(r => !f.categoria || r.CATEGORIA === f.categoria)
+              .map(r => `<option value="${(r.ITEM||'').replace(/"/g,'&quot;')}" data-cat="${r.CATEGORIA||''}" data-total="${parseBRL(r['TOTAL 2026 (R$)']||0)}"
+                ${f.item===r.ITEM?'selected':''}>${r.ITEM}</option>`).join('')}
+            <option value="__outro__" ${!itensOrcados.some(r => r.ITEM===f.item) && f.item ? 'selected' : ''}>Outro (digitar)</option>
+          </select>
+          <input class="form-control" id="sf-item-custom" style="margin-top:6px;display:${(!itensOrcados.some(r=>r.ITEM===f.item) && f.item) ? 'block' : 'none'}"
+            value="${(!itensOrcados.some(r=>r.ITEM===f.item) && f.item) ? f.item : ''}" placeholder="Digite o nome do item">
         </div>
       </div>
       <div class="form-row">
@@ -1897,14 +2019,38 @@ function renderSolicStep1() {
   `;
 }
 
+function onSolicCidadeChange(val) {
+  _solicForm.cidade = val;
+  document.getElementById('solic-step-body').innerHTML = renderSolicStep();
+}
+function onSolicCatChange(val) {
+  const custom = document.getElementById('sf-cat-custom');
+  if (val === '__outro__') { custom.style.display = 'block'; custom.focus(); }
+  else { custom.style.display = 'none'; }
+  // Filtra itens pela categoria
+  const itemSel = document.getElementById('sf-item-sel');
+  const itensOrcados = prodData.filter(r => r['STATUS'] === 'Orçado');
+  const catReal = val === '__outro__' ? '' : val;
+  itemSel.innerHTML = `<option value="">Selecione o item</option>` +
+    itensOrcados.filter(r => !catReal || r.CATEGORIA === catReal)
+      .map(r => `<option value="${(r.ITEM||'').replace(/"/g,'&quot;')}" data-total="${parseBRL(r['TOTAL 2026 (R$)']||0)}">${r.ITEM}</option>`).join('') +
+    `<option value="__outro__">Outro (digitar)</option>`;
+}
+function onSolicItemChange(val) {
+  const custom = document.getElementById('sf-item-custom');
+  if (val === '__outro__') { custom.style.display = 'block'; custom.focus(); }
+  else { custom.style.display = 'none'; }
+}
+
 function renderSolicStep2() {
   const f = _solicForm;
+  const favDefault = f.favorecido || f._fornecedorRef || '';
   return `
     <div class="step-pane active">
       <div class="form-row">
         <div class="form-group">
           <label>Favorecido *</label>
-          <input class="form-control" id="sf-fav" value="${f.favorecido||''}" placeholder="Nome completo ou razão social">
+          <input class="form-control" id="sf-fav" value="${favDefault}" placeholder="Nome completo ou razão social">
         </div>
       </div>
       <div class="form-row col3">
@@ -1933,8 +2079,8 @@ function renderSolicStep2() {
           <input class="form-control" id="sf-valor" type="number" min="0" step="0.01" value="${f.valor||''}">
         </div>
         <div class="form-group">
-          <label>Custo 2026 — referência (R$)</label>
-          <input class="form-control" id="sf-custo26" readonly value="${f.custo26||''}" placeholder="Preenchido auto se item localizado">
+          <label>Custo 2026 — referência (R$) <span style="font-size:10px;color:var(--text3)">(item Orçado na Produção)</span></label>
+          <input class="form-control" id="sf-custo26" readonly value="${f.custo26 ? formatBRL(parseFloat(f.custo26)) : ''}" placeholder="—" style="${f.custo26 ? 'color:var(--accent)' : ''}">
         </div>
       </div>
       <div class="step-nav">
@@ -2078,8 +2224,16 @@ function solicProximo(etapaAtual) {
   if (etapaAtual === 1) {
     const p = USUARIO.perfil;
     const cidade = p === 'prod' ? CIDADE_ATIVA : (document.getElementById('sf-cidade')?.value || '');
-    const cat = document.getElementById('sf-cat')?.value.trim();
-    const item = document.getElementById('sf-item')?.value.trim();
+    // Categoria: select ou custom
+    const catSel = document.getElementById('sf-cat')?.value || '';
+    const cat = catSel === '__outro__'
+      ? (document.getElementById('sf-cat-custom')?.value.trim() || '')
+      : catSel;
+    // Item: select ou custom
+    const itemSel = document.getElementById('sf-item-sel')?.value || '';
+    const item = itemSel === '__outro__'
+      ? (document.getElementById('sf-item-custom')?.value.trim() || '')
+      : itemSel;
     const desc = document.getElementById('sf-desc')?.value.trim();
     if (!cidade || !cat || !item || !desc) { showToast('Preencha todos os campos obrigatórios.', 'warn'); return; }
     _solicForm.cidade = cidade;
@@ -2087,12 +2241,11 @@ function solicProximo(etapaAtual) {
     _solicForm.item = item;
     _solicForm.descricao = desc;
 
-    // Tenta localizar referência de custo na Produção
-    const sheetId = cidadeSheet(cidade);
-    if (sheetId) {
-      const ref = prodData.find(r => r.ITEM && r.ITEM.toLowerCase().includes(item.toLowerCase()));
-      _solicForm.custo26 = ref ? parseBRL(ref['TOTAL 2026 (R$)']||0).toFixed(2) : '';
-    }
+    // Custo 2026: busca na produção pelo item exato
+    const ref = prodData.find(r => r.ITEM && r.ITEM.toLowerCase() === item.toLowerCase() && r['STATUS'] === 'Orçado');
+    _solicForm.custo26 = ref ? parseBRL(ref['TOTAL 2026 (R$)']||0).toFixed(2) : '';
+    // Fornecedor pré-preenchido se disponível
+    _solicForm._fornecedorRef = ref?.FORNECEDOR || '';
   } else if (etapaAtual === 2) {
     const fav = document.getElementById('sf-fav')?.value.trim();
     const valor = document.getElementById('sf-valor')?.value;
@@ -2216,6 +2369,9 @@ async function carregarAprovacoes() {
       return obj;
     }).filter(r => r.DATA || r.ITEM);
 
+    // Mantém solicData sincronizado para abrirDetalheSolic
+    solicData = all;
+
     const pendentes   = all.filter(r => r.STATUS === 'Em aberto');
     const aprovadas   = all.filter(r => r.STATUS === 'Pagamento aprovado');
     const aguardando  = all.filter(r => r.STATUS === 'Solicitado a MeuBilhete');
@@ -2243,26 +2399,43 @@ function renderAprovSection(titulo, emoji, dados, tipo) {
           ? `<div class="empty-state" style="padding:28px"><div class="icon" style="font-size:24px;margin-bottom:8px">✅</div><p>Nenhuma solicitação nesta etapa.</p></div>`
           : `<div class="table-wrap"><table>
               <thead><tr>
-                <th>Data</th><th>Cidade</th><th>Solicitante</th><th>Item</th>
-                <th>Valor</th><th>Parcela</th><th>Ações</th>
+                <th>Data Solic.</th><th>Cidade</th><th>Item</th><th>Valor</th>
+                <th>Parcela</th><th>Favorecido</th><th>Data Pgto</th><th>Ações</th>
               </tr></thead>
               <tbody>
                 ${dados.map(r => `
-                  <tr>
+                  <tr class="clickable" onclick="abrirDetalheSolicAprov(${r._rowIndex},event)">
                     <td>${r.DATA||'—'}</td>
                     <td>${r.CIDADE||'—'}</td>
-                    <td>${r.SOLICITANTE||'—'}</td>
                     <td class="text-main">${r.ITEM||'—'}</td>
                     <td>${formatBRL(parseBRL(r['VALOR SOLICITADO (R$)']||0))}</td>
                     <td>${r.PARCELAS||'à vista'}</td>
-                    <td>${renderAprovAcoes(r, tipo)}</td>
+                    <td>${r.FAVORECIDO||'—'}</td>
+                    <td>${r['DATA PAGAMENTO']||'—'}</td>
+                    <td onclick="event.stopPropagation()">${renderAprovAcoes(r, tipo)}</td>
                   </tr>`).join('')}
               </tbody>
-            </table></div>`
+            </table></div>
+            <p style="font-size:11px;color:var(--text3);padding:8px 14px">💡 Clique na linha para ver detalhes completos</p>`
         }
       </div>
     </div>
   `;
+}
+
+function abrirDetalheSolicAprov(rowIndex, e) {
+  // Usa os dados já carregados em solicData se disponível, senão busca no cache
+  let r = solicData.find(x => x._rowIndex === rowIndex);
+  if (!r) {
+    // fallback: recarrega
+    showToast('Recarregando dados...', 'info', 1500);
+    carregarSolicitacoes().then(() => {
+      r = solicData.find(x => x._rowIndex === rowIndex);
+      if (r) abrirDetalheSolic(rowIndex);
+    });
+    return;
+  }
+  abrirDetalheSolic(rowIndex);
 }
 
 function renderAprovAcoes(r, tipo) {
@@ -2414,7 +2587,7 @@ async function confirmarPagamento(rowIndex, cidade, item, valorSol, valorPagoAnt
       ]]);
       cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:V`);
 
-      // Atualiza PPP da cidade (colunas J e K)
+      // Atualiza PPP da cidade (colunas J, K e L=fornecedor se em branco)
       const cid = CIDADES.find(c => c.nome === cidade || c.cidade === cidade.toLowerCase());
       if (cid?.idSheet) {
         try {
@@ -2427,7 +2600,11 @@ async function confirmarPagamento(rowIndex, cidade, item, valorSol, valorPagoAnt
             });
             if (match >= 0) {
               const pppRowIdx = match + 2;
-              await sheetsWrite(cid.idSheet, `Produção!J${pppRowIdx}:K${pppRowIdx}`, [[totalPago, novoStatus]]);
+              const pppRow = rowToObj(h, pppRows[match + 1]);
+              // Busca favorecido da solicitação para preencher fornecedor se vazio
+              const solicRef = solicData.find(s => s._rowIndex === rowIndex);
+              const fornecedor = pppRow['FORNECEDOR'] || solicRef?.FAVORECIDO || '';
+              await sheetsWrite(cid.idSheet, `Produção!J${pppRowIdx}:L${pppRowIdx}`, [[totalPago, novoStatus, fornecedor]]);
               cacheInvalidate(`${cid.idSheet}::Produção!A:N`);
             }
           }
