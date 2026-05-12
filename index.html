@@ -2798,8 +2798,14 @@ function renderAprovAcoes(r, tipo) {
       onclick="enviarMeuBilhete(${r._rowIndex})">→ MeuBilhete</button>`;
   }
   if (tipo === 'confirmar') {
+    // Bug pagamento parcelado: passa valor da PARCELA (coluna U), não o total da solicitação (coluna M).
+    // Em "à vista", VALOR PARCELA = VALOR SOLICITADO; em parcelado, são diferentes.
+    const valorParcela = parseBRL(
+      r['VALOR PARCELA (R$)'] || r['VALOR PARCELA'] ||
+      r['VALOR SOLICITADO (R$)'] || 0
+    );
     return `<button class="btn btn-sm" style="background:var(--blue-dim);color:var(--blue);border:1px solid rgba(78,157,245,0.3)"
-      onclick="abrirModalPagamento(${r._rowIndex},'${(r.CIDADE||'').replace(/'/g,"\\'")}','${(r.ITEM||'').replace(/'/g,"\\'")}','${(r['VALOR SOLICITADO (R$)']||'0').replace(/'/g,"\\'")}','${(r['VALOR PAGO (R$)']||'0').replace(/'/g,"\\'")}')">
+      onclick="abrirModalPagamento(${r._rowIndex},'${(r.CIDADE||'').replace(/'/g,"\\'")}','${(r.ITEM||'').replace(/'/g,"\\'")}',${valorParcela},'${(r['VALOR PAGO (R$)']||'0').replace(/'/g,"\\'")}')">
       💰 Confirmar Pagamento</button>`;
   }
   return '';
@@ -2910,18 +2916,31 @@ async function enviarMeuBilhete(rowIndex) {
   }
 }
 
-function abrirModalPagamento(rowIndex, cidade, item, valorSolStr, valorPagoAnteriorStr) {
-  const valorSol = parseBRL(valorSolStr);
+function abrirModalPagamento(rowIndex, cidade, item, valorParcela, valorPagoAnteriorStr) {
+  // valorParcela: valor desta linha de Solicitações (coluna U). Em à vista = valor total da solic.
+  // valorPagoAnteriorStr: valor já pago nesta linha de parcela (normalmente 0)
+  const valorPag = (typeof valorParcela === 'number') ? valorParcela : parseBRL(valorParcela);
   const valorPagoAnt = parseBRL(valorPagoAnteriorStr);
+  const restante = Math.max(0, valorPag - valorPagoAnt);
+
+  // Para dar contexto: identifica esta parcela específica (ex: "Parcela 1/2") da solicitação
+  const solicAtual = solicData.find(s => s._rowIndex === rowIndex);
+  const parcelaLabel = solicAtual?.PARCELAS || 'à vista';
+  const valorSolicTotal = parseBRL(solicAtual?.['VALOR SOLICITADO (R$)'] || 0);
+
   abrirModal('Confirmar Pagamento', `
     <p style="font-size:13px;color:var(--text2);margin-bottom:4px">Item: <strong>${item}</strong></p>
-    <p style="font-size:12px;color:var(--text3);margin-bottom:16px">
-      Valor solicitado: ${formatBRL(valorSol)} · Já pago: ${formatBRL(valorPagoAnt)}
+    <p style="font-size:12px;color:var(--text3);margin-bottom:6px">
+      Solicitação total: ${formatBRL(valorSolicTotal)} · ${parcelaLabel}
+    </p>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:16px;padding:8px 10px;background:var(--bg2);border-radius:6px">
+      <strong style="color:var(--accent)">Valor desta parcela: ${formatBRL(valorPag)}</strong>
+      ${valorPagoAnt > 0 ? `· Já pago nesta parcela: ${formatBRL(valorPagoAnt)} · Restante: ${formatBRL(restante)}` : ''}
     </p>
     <div class="form-row col2">
       <div class="form-group">
-        <label>Valor Pago (R$) *</label>
-        <input class="form-control" id="pg-valor" type="number" min="0" step="0.01" placeholder="0,00">
+        <label>Valor Pago Agora (R$) *</label>
+        <input class="form-control" id="pg-valor" type="number" min="0" step="0.01" value="${restante.toFixed(2)}" placeholder="0,00">
       </div>
       <div class="form-group">
         <label>Data do Pagamento *</label>
@@ -2935,14 +2954,15 @@ function abrirModalPagamento(rowIndex, cidade, item, valorSolStr, valorPagoAnter
     <div style="display:flex;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--border)">
       <button class="btn btn-secondary" onclick="fecharModal()">Cancelar</button>
       <button class="btn btn-primary" id="btn-pg-conf"
-        onclick="confirmarPagamento(${rowIndex},'${cidade.replace(/'/g,"\\'")}','${item.replace(/'/g,"\\'")}',${valorSol},${valorPagoAnt})">
+        onclick="confirmarPagamento(${rowIndex},'${cidade.replace(/'/g,"\\'")}','${item.replace(/'/g,"\\'")}',${valorPag},${valorPagoAnt})">
         💰 Confirmar
       </button>
     </div>
   `);
 }
 
-async function confirmarPagamento(rowIndex, cidade, item, valorSol, valorPagoAnt) {
+async function confirmarPagamento(rowIndex, cidade, item, valorParcela, valorPagoAnt) {
+  // valorParcela: valor desta linha (coluna U). valorPagoAnt: já pago NESTA linha.
   const valorNovo = parseFloat(document.getElementById('pg-valor')?.value || 0);
   const dataPg = formatDateBR(document.getElementById('pg-data')?.value || '');
   const comp = document.getElementById('pg-comp')?.value.trim() || '';
@@ -2950,22 +2970,59 @@ async function confirmarPagamento(rowIndex, cidade, item, valorSol, valorPagoAnt
 
   const btn = document.getElementById('btn-pg-conf');
   await btnRun(btn, async () => {
+    // Variáveis preenchidas no try interno e usadas no toast final
+    let statusItemGlobal = '';
+    let valorTotalItemMsg = 0;
+    let totalPagoItemMsg = 0;
     try {
-      const totalPago = valorPagoAnt + valorNovo;
-      const novoStatus = totalPago >= valorSol ? 'Pago' : 'Pago parcial';
+      // Status DESTA linha (parcela): comparado contra o valor da parcela (não o total da solicitação)
+      const totalPagoLinha = valorPagoAnt + valorNovo;
+      const novoStatus = totalPagoLinha >= valorParcela - 0.005 ? 'Pago' : 'Pago parcial';
 
-      // Atualiza: P=STATUS, S=PAGO POR, T=DATA PAGAMENTO REAL (sobrescreve vencimento), U=VALOR PAGO TOTAL, V=COMPROVANTE
+      // Atualiza: P=STATUS, S=PAGO POR, T=DATA PAGAMENTO REAL (sobrescreve vencimento), U=VALOR PAGO TOTAL (DESTA parcela), V=COMPROVANTE
       await sheetsWrite(SHEET_GERAL, `Solicitações!P${rowIndex}`, [[novoStatus]]);
       await sheetsWrite(SHEET_GERAL, `Solicitações!S${rowIndex}:V${rowIndex}`, [[
-        USUARIO.nome, textoData(dataPg), totalPago, comp
+        USUARIO.nome, textoData(dataPg), totalPagoLinha, comp
       ]]);
       cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:V`);
 
       // Atualiza PPP da cidade (colunas J=valor pago, K=status, L=fornecedor se em branco)
-      // Bug #5: agora usa localizarItemProducao (com normCid) + grava no histórico
+      // Bug #5 + bug pagamento parcelado: o valor pago na Produção e o status do ITEM são GLOBAIS
+      // — somam TODAS as parcelas pagas da solicitação (mesmo ITEM + CIDADE), não só esta linha.
       try {
         const solic = solicData.find(s => s._rowIndex === rowIndex);
         const cat = solic?.CATEGORIA || '';
+        const valorTotalSolic = parseBRL(solic?.['VALOR SOLICITADO (R$)'] || 0);
+
+        // Soma o valor pago de TODAS as linhas (parcelas) com o mesmo item + cidade.
+        // Para a linha atual (rowIndex), usa o valor que ACABAMOS de calcular (totalPagoLinha),
+        // pois solicData ainda tem o estado anterior (antes deste pagamento).
+        let totalPagoItem = 0;
+        const itemNorm = String(item).toLowerCase().trim();
+        const cidadeNorm = normCid(cidade);
+        for (const s of solicData) {
+          const mesmoItem = s.ITEM && String(s.ITEM).toLowerCase().trim() === itemNorm;
+          const mesmaCidade = normCid(s.CIDADE) === cidadeNorm;
+          if (!mesmoItem || !mesmaCidade) continue;
+          if (s._rowIndex === rowIndex) {
+            // Linha que acabou de ser paga — usa o valor recém-calculado
+            totalPagoItem += totalPagoLinha;
+          } else {
+            // Outras parcelas — usa o que está gravado
+            totalPagoItem += parseBRL(s['VALOR PAGO (R$)'] || 0);
+          }
+        }
+
+        // Status do ITEM na Produção: baseado na soma total vs valor total da solicitação
+        const statusProducao = (valorTotalSolic > 0 && totalPagoItem >= valorTotalSolic - 0.005)
+          ? 'Pago'
+          : 'Pago parcial';
+
+        // Expõe para o toast informativo
+        statusItemGlobal = statusProducao;
+        valorTotalItemMsg = valorTotalSolic;
+        totalPagoItemMsg = totalPagoItem;
+
         const loc = await localizarItemProducao(cidade, cat, item);
         if (loc) {
           const cidNorm = CIDADES.find(c => normCid(c.cidade) === normCid(cidade) || normCid(c.nome) === normCid(cidade));
@@ -2981,15 +3038,15 @@ async function confirmarPagamento(rowIndex, cidade, item, valorSol, valorPagoAnt
               const solicRef = solicData.find(s => s._rowIndex === rowIndex);
               fornecedor = solicRef?.FAVORECIDO || '';
             }
-            // Atualiza J (valor pago acumulado), K (status), L (fornecedor)
-            await sheetsWrite(cidNorm.idSheet, `Produção!J${loc.rowIndex}:L${loc.rowIndex}`, [[totalPago, novoStatus, fornecedor]]);
+            // Atualiza J (valor pago acumulado do ITEM), K (status do ITEM), L (fornecedor)
+            await sheetsWrite(cidNorm.idSheet, `Produção!J${loc.rowIndex}:L${loc.rowIndex}`, [[totalPagoItem, statusProducao, fornecedor]]);
             cacheInvalidate(`${cidNorm.idSheet}::Produção!A:N`);
 
             // Registra a mudança de status no Alertas & Histórico
             const histRow = [
               textoData(agora()), USUARIO.nome, item, cidNorm.nome,
-              loc.status || '', novoStatus, '—', 'Mudança de status',
-              `Pagamento ${novoStatus === 'Pago' ? 'completo' : 'parcial'}: ${formatBRL(valorNovo)}`
+              loc.status || '', statusProducao, '—', 'Mudança de status',
+              `Pagamento ${statusProducao === 'Pago' ? 'completo' : 'parcial'}: ${formatBRL(valorNovo)} (acumulado: ${formatBRL(totalPagoItem)} / ${formatBRL(valorTotalSolic)})`
             ];
             sheetsAppend(SHEET_GERAL, 'Alertas & Histórico!A:I', [histRow]).catch(() => {});
           }
@@ -3000,7 +3057,11 @@ async function confirmarPagamento(rowIndex, cidade, item, valorSol, valorPagoAnt
       const cid = CIDADES.find(c => normCid(c.cidade) === normCid(cidade) || normCid(c.nome) === normCid(cidade));
 
       fecharModal();
-      showToast(`Pagamento confirmado — ${novoStatus}!`, 'success');
+      // Mostra status DESTA parcela + (se houver) acumulado do item completo
+      const sufixoItem = statusItemGlobal && valorTotalItemMsg > 0
+        ? ` · Item ${statusItemGlobal} (${formatBRL(totalPagoItemMsg)} / ${formatBRL(valorTotalItemMsg)})`
+        : '';
+      showToast(`Pagamento confirmado — ${novoStatus}${sufixoItem}`, 'success');
 
       // WhatsApp → produtores da cidade + FIN001
       // Princípio 6: normCid para tolerar cidades acentuadas
