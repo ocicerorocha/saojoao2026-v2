@@ -2706,6 +2706,17 @@ let recCidFiltro = '';
 
 const REC_STATUS = ['Previsto', 'Confirmado', 'Recebido', 'Recebido parcial'];
 
+// Helper compartilhado: normaliza nome de cidade (remove acentos, lowercase, trim)
+// — usado para comparar valores da planilha ("Irecê", "Jequié", "Serrinha")
+// com os códigos internos do sistema ("irece", "jequie", "serrinha").
+function normCid(s) {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
 function recBadgeClass(st) {
   if (st === 'Previsto') return 'badge-gray';
   if (st === 'Confirmado') return 'badge-blue';
@@ -2777,14 +2788,14 @@ function renderReceitasView(content) {
   // Filtragem por perfil: prod só vê sua cidade
   let dados = receitasData;
   if (p === 'prod') {
-    dados = dados.filter(r => (r.CIDADE || '').toLowerCase() === CIDADE_ATIVA);
+    dados = dados.filter(r => normCid(r.CIDADE) === CIDADE_ATIVA);
   } else if (CIDADE_ATIVA && CIDADE_ATIVA !== 'todas') {
     // Respeita seletor de cidade do topbar
-    dados = dados.filter(r => (r.CIDADE || '').toLowerCase() === CIDADE_ATIVA);
+    dados = dados.filter(r => normCid(r.CIDADE) === CIDADE_ATIVA);
   }
 
   // Filtros locais
-  if (recCidFiltro) dados = dados.filter(r => (r.CIDADE || '').toLowerCase() === recCidFiltro);
+  if (recCidFiltro) dados = dados.filter(r => normCid(r.CIDADE) === recCidFiltro);
   if (recStatusFiltro) dados = dados.filter(r => r.STATUS === recStatusFiltro);
   if (recCatFiltro) dados = dados.filter(r => r.CATEGORIA === recCatFiltro);
 
@@ -2864,7 +2875,7 @@ function renderReceitasView(content) {
                 <tr ${podeEditar ? `class="clickable" onclick="abrirModalReceita(${r._rowIndex})" title="Clique para editar"` : ''}>
                   <td>${normalizarData(r.DATA) || '—'}</td>
                   <td>${r.CATEGORIA || '—'}</td>
-                  <td>${cidadeNome((r.CIDADE||'').toLowerCase()) || r.CIDADE || '—'}</td>
+                  <td>${cidadeNome(normCid(r.CIDADE)) || r.CIDADE || '—'}</td>
                   <td class="text-main">${r['DESCRIÇÃO'] || '—'}</td>
                   <td style="text-align:right;font-weight:600">${formatBRL(parseBRL(r['VALOR (R$)'] || r.VALOR || 0))}</td>
                   <td><span class="badge ${recBadgeClass(r.STATUS)}">${r.STATUS || '—'}</span></td>
@@ -2908,7 +2919,7 @@ function abrirModalReceita(rowIndex) {
       <div class="form-group">
         <label>Cidade *</label>
         <select class="form-control" id="rf-cidade">
-          ${cidsVis.map(c => `<option value="${c.cidade}" ${(r.CIDADE||'').toLowerCase()===c.cidade?'selected':''}>${c.nome}</option>`).join('')}
+          ${cidsVis.map(c => `<option value="${c.cidade}" ${normCid(r.CIDADE)===c.cidade?'selected':''}>${c.nome}</option>`).join('')}
         </select>
       </div>
     </div>
@@ -3141,11 +3152,11 @@ function renderAlertasView(content) {
   // Filtragem por perfil
   let dados = alertasData;
   if (p === 'prod') {
-    dados = dados.filter(r => (r.CIDADE || '').toLowerCase() === CIDADE_ATIVA);
+    dados = dados.filter(r => normCid(r.CIDADE) === CIDADE_ATIVA);
   }
 
   // Filtros locais
-  if (alertCidFiltro) dados = dados.filter(r => (r.CIDADE || '').toLowerCase() === alertCidFiltro);
+  if (alertCidFiltro) dados = dados.filter(r => normCid(r.CIDADE) === alertCidFiltro);
   if (alertTipoFiltro) dados = dados.filter(r => (r.TIPO || '') === alertTipoFiltro);
 
   if (alertDtDe || alertDtAte) {
@@ -3221,7 +3232,7 @@ function renderAlertasView(content) {
                   <td style="white-space:nowrap">${r['DATA / HORA'] || r.DATA || '—'}</td>
                   <td>${r['USUÁRIO'] || r.USUARIO || '—'}</td>
                   <td class="text-main">${r.ITEM || '—'}</td>
-                  <td>${cidadeNome((r.CIDADE||'').toLowerCase()) || r.CIDADE || '—'}</td>
+                  <td>${cidadeNome(normCid(r.CIDADE)) || r.CIDADE || '—'}</td>
                   <td style="text-align:right">${r['VALOR ANTERIOR (R$)'] ? formatBRL(parseBRL(r['VALOR ANTERIOR (R$)'])) : '—'}</td>
                   <td style="text-align:right">${r['NOVO VALOR (R$)'] ? formatBRL(parseBRL(r['NOVO VALOR (R$)'])) : '—'}</td>
                   <td style="text-align:right;color:${corVar};font-weight:600">${variacao || '—'}</td>
@@ -3304,13 +3315,13 @@ function renderDocumentosView(content) {
   // Filtragem por perfil
   let dados = docsData;
   if (p === 'prod') {
-    dados = dados.filter(r => (r.CIDADE || '').toLowerCase() === CIDADE_ATIVA);
+    dados = dados.filter(r => normCid(r.CIDADE) === CIDADE_ATIVA);
   } else if (CIDADE_ATIVA && CIDADE_ATIVA !== 'todas') {
-    dados = dados.filter(r => (r.CIDADE || '').toLowerCase() === CIDADE_ATIVA);
+    dados = dados.filter(r => normCid(r.CIDADE) === CIDADE_ATIVA);
   }
 
   // Filtros locais
-  if (docCidFiltro) dados = dados.filter(r => (r.CIDADE || '').toLowerCase() === docCidFiltro);
+  if (docCidFiltro) dados = dados.filter(r => normCid(r.CIDADE) === docCidFiltro);
   if (docTipoFiltro) dados = dados.filter(r => (r.TIPO || '') === docTipoFiltro);
 
   // Ordena por data desc
@@ -3364,7 +3375,7 @@ function renderDocumentosView(content) {
                 <tr>
                   <td style="white-space:nowrap">${normalizarData(r.DATA) || '—'}</td>
                   <td>${r.TIPO ? `<span class="badge badge-gray">${r.TIPO}</span>` : '—'}</td>
-                  <td>${cidadeNome((r.CIDADE||'').toLowerCase()) || r.CIDADE || '—'}</td>
+                  <td>${cidadeNome(normCid(r.CIDADE)) || r.CIDADE || '—'}</td>
                   <td class="text-main">${r['TÍTULO'] || '—'}</td>
                   <td>${link
                       ? `<a href="${linkSeguro}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="text-decoration:none">↗ Abrir</a>`
@@ -3409,7 +3420,7 @@ function abrirModalDocumento(rowIndex) {
 
   // Cidade default: para prod, sua cidade
   let cidadeDefault = d.CIDADE || (p === 'prod' ? USUARIO.cidade : (CIDADE_ATIVA && CIDADE_ATIVA !== 'todas' ? CIDADE_ATIVA : (cidsVis[0] && cidsVis[0].cidade) || ''));
-  cidadeDefault = String(cidadeDefault).toLowerCase();
+  cidadeDefault = normCid(cidadeDefault);
 
   const tipoAtual = d.TIPO || 'Contrato';
 
@@ -3659,7 +3670,7 @@ function abrirModalUsuario(rowIndex) {
 
   const perfilAtual = (u.PERFIL || 'prod').toLowerCase();
   const codigoAtual = (u['CÓDIGO'] || '').trim();
-  const cidadeAtual = (u.CIDADE || '').toLowerCase().replace(/[—–]/g, '').trim();
+  const cidadeAtual = normCid(u.CIDADE).replace(/[—–]/g, '').trim();
   const isProprioMestre = codigoAtual === USUARIO.codigo && perfilAtual === 'mestre';
 
   const html = `
@@ -3809,7 +3820,7 @@ async function recarregarUsuariosGlobal() {
       codigo: u['CÓDIGO'].trim(),
       nome: u.NOME || u['CÓDIGO'],
       perfil: (u.PERFIL || '').toLowerCase(),
-      cidade: (u.CIDADE || '').toLowerCase().replace(/[—–]/g, '').trim(),
+      cidade: normCid(u.CIDADE).replace(/[—–]/g, '').trim(),
       whatsapp: u.WHATSAPP || ''
     }));
 }
