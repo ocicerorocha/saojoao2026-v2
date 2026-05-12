@@ -347,7 +347,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <label>Código de acesso</label>
       <input type="text" id="loginCode" placeholder="Ex: MESTRE01" autocomplete="off"
              autocapitalize="characters" style="text-transform:uppercase" maxlength="20"
-             onkeydown="if(event.key==='Enter') doLogin()">
+             onkeydown="if(event.key==='Enter') doLogin()" placeholder="">
     </div>
     <button class="btn-login" id="btnLogin" onclick="doLogin()">Entrar</button>
     <div class="login-error" id="loginError"></div>
