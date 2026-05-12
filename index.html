@@ -564,8 +564,16 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
 
   <!-- RECEITAS -->
   <div id="tab-receitas" class="tab-pane">
-    <div class="page-header"><h1>Receitas</h1></div>
-    <div class="coming-soon"><div class="icon">💰</div><h2>Receitas</h2><p>Em construção — próxima sessão</p></div>
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <h1>Receitas</h1>
+        <p>Acompanhe entradas previstas, confirmadas e recebidas</p>
+      </div>
+      <div id="rec-header-actions"></div>
+    </div>
+    <div id="rec-content">
+      <div class="loading-state"><div class="spinner"></div><span>Carregando...</span></div>
+    </div>
   </div>
 
   <!-- BILHETERIA -->
@@ -576,20 +584,38 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
 
   <!-- DOCUMENTOS -->
   <div id="tab-documentos" class="tab-pane">
-    <div class="page-header"><h1>Documentos</h1></div>
-    <div class="coming-soon"><div class="icon">📁</div><h2>Documentos</h2><p>Em construção — próxima sessão</p></div>
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <h1>Documentos</h1>
+        <p>Contratos, NFs, orçamentos e demais arquivos</p>
+      </div>
+      <div id="doc-header-actions"></div>
+    </div>
+    <div id="doc-content">
+      <div class="loading-state"><div class="spinner"></div><span>Carregando...</span></div>
+    </div>
   </div>
 
   <!-- ALERTAS -->
   <div id="tab-alertas" class="tab-pane">
-    <div class="page-header"><h1>Alertas & Histórico</h1></div>
-    <div class="coming-soon"><div class="icon">🔔</div><h2>Alertas & Histórico</h2><p>Em construção — próxima sessão</p></div>
+    <div class="page-header">
+      <h1>Alertas & Histórico</h1>
+      <p>Trilha de auditoria de variações de custos e ações no sistema</p>
+    </div>
+    <div id="alert-content">
+      <div class="loading-state"><div class="spinner"></div><span>Carregando...</span></div>
+    </div>
   </div>
 
   <!-- CONFIGURAÇÕES -->
   <div id="tab-config" class="tab-pane">
-    <div class="page-header"><h1>Configurações</h1></div>
-    <div class="coming-soon"><div class="icon">⚙️</div><h2>Configurações</h2><p>Em construção — próxima sessão</p></div>
+    <div class="page-header">
+      <h1>Configurações</h1>
+      <p>Gerencie usuários e cidades do sistema</p>
+    </div>
+    <div id="config-content">
+      <div class="loading-state"><div class="spinner"></div><span>Carregando...</span></div>
+    </div>
   </div>
 
 </div>
@@ -1076,6 +1102,10 @@ function onTabChange(tabId) {
   if (tabId === 'producao') iniciarProducao();
   if (tabId === 'solicitacoes') iniciarSolicitacoes();
   if (tabId === 'aprovacoes') iniciarAprovacoes();
+  if (tabId === 'receitas') iniciarReceitas();
+  if (tabId === 'alertas') iniciarAlertas();
+  if (tabId === 'documentos') iniciarDocumentos();
+  if (tabId === 'config') iniciarConfig();
 }
 
 /* ══════════════════════════════════════════════════════════════
@@ -2663,6 +2693,1276 @@ async function confirmarPagamento(rowIndex, cidade, item, valorSol, valorPagoAnt
       showToast(`Erro: ${e.message}`, 'error');
     }
   });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BLOCO 15 — RECEITAS
+══════════════════════════════════════════════════════════════ */
+let receitasData = [];
+let recCatsList = [];      // lista de categorias da aba Categorias Receita
+let recCatFiltro = '';
+let recStatusFiltro = '';
+let recCidFiltro = '';
+
+const REC_STATUS = ['Previsto', 'Confirmado', 'Recebido', 'Recebido parcial'];
+
+function recBadgeClass(st) {
+  if (st === 'Previsto') return 'badge-gray';
+  if (st === 'Confirmado') return 'badge-blue';
+  if (st === 'Recebido') return 'badge-green';
+  if (st === 'Recebido parcial') return 'badge-accent';
+  return 'badge-gray';
+}
+
+async function iniciarReceitas() {
+  // Botão de header (só mestre/fin podem criar)
+  const podeCriar = USUARIO.perfil === 'mestre' || USUARIO.perfil === 'fin';
+  const headerActions = document.getElementById('rec-header-actions');
+  if (headerActions) {
+    headerActions.innerHTML = podeCriar
+      ? `<button class="btn btn-primary" onclick="abrirModalReceita()">+ Nova receita</button>`
+      : '';
+  }
+  await carregarReceitasFull();
+}
+
+async function carregarReceitasFull() {
+  const content = document.getElementById('rec-content');
+  content.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>Carregando receitas...</span></div>`;
+  try {
+    // Carrega receitas e categorias em paralelo
+    const [recRows, catRows] = await Promise.all([
+      sheetsRead(SHEET_GERAL, 'Receitas!A:H'),
+      sheetsRead(SHEET_GERAL, 'Categorias Receita!A:B').catch(() => [])
+    ]);
+
+    if (!recRows || recRows.length < 2) {
+      receitasData = [];
+    } else {
+      const h = recRows[0];
+      receitasData = recRows.slice(1).map((r, i) => {
+        const obj = rowToObj(h, r);
+        obj._rowIndex = i + 2;
+        return obj;
+      }).filter(r => r.DATA || r['DESCRIÇÃO'] || r.CATEGORIA);
+    }
+
+    if (!catRows || catRows.length < 2) {
+      recCatsList = [];
+    } else {
+      const hc = catRows[0];
+      recCatsList = catRows.slice(1)
+        .map((r, i) => {
+          const obj = rowToObj(hc, r);
+          obj._rowIndex = i + 2;
+          return obj;
+        })
+        .filter(c => c.CATEGORIA)
+        .map(c => c.CATEGORIA.trim());
+      // remover duplicadas mantendo ordem
+      recCatsList = [...new Set(recCatsList)];
+    }
+
+    renderReceitasView(content);
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><p style="color:var(--red)">${e.message}</p></div>`;
+  }
+}
+
+function renderReceitasView(content) {
+  const p = USUARIO.perfil;
+  const cidsVis = cidadesVisiveis();
+  const podeEditar = p === 'mestre' || p === 'fin';
+
+  // Filtragem por perfil: prod só vê sua cidade
+  let dados = receitasData;
+  if (p === 'prod') {
+    dados = dados.filter(r => (r.CIDADE || '').toLowerCase() === CIDADE_ATIVA);
+  } else if (CIDADE_ATIVA && CIDADE_ATIVA !== 'todas') {
+    // Respeita seletor de cidade do topbar
+    dados = dados.filter(r => (r.CIDADE || '').toLowerCase() === CIDADE_ATIVA);
+  }
+
+  // Filtros locais
+  if (recCidFiltro) dados = dados.filter(r => (r.CIDADE || '').toLowerCase() === recCidFiltro);
+  if (recStatusFiltro) dados = dados.filter(r => r.STATUS === recStatusFiltro);
+  if (recCatFiltro) dados = dados.filter(r => r.CATEGORIA === recCatFiltro);
+
+  // Métricas (sobre o conjunto filtrado)
+  let previsto = 0, recebido = 0;
+  dados.forEach(r => {
+    const v = parseBRL(r['VALOR (R$)'] || r.VALOR || 0);
+    const st = r.STATUS || '';
+    if (st === 'Previsto' || st === 'Confirmado') previsto += v;
+    if (st === 'Recebido' || st === 'Recebido parcial') recebido += v;
+  });
+  const diferenca = previsto - recebido;
+  const corDif = diferenca <= 0 ? 'green' : 'red';
+
+  // Categorias únicas para o filtro (mescla da aba Categorias com as usadas)
+  const catsNosDados = [...new Set(dados.map(r => r.CATEGORIA).filter(Boolean))];
+  const catsFiltroOpts = [...new Set([...recCatsList, ...catsNosDados])];
+
+  // Cidades para filtro (só faz sentido se p não-prod)
+  const mostrarCidFiltro = p !== 'prod' && cidsVis.length > 1;
+
+  content.innerHTML = `
+    <div class="metrics-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px">
+      <div class="metric-card blue">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">Previsto + Confirmado</div>
+        <div style="font-size:20px;font-weight:700;color:var(--blue)">${formatBRL(previsto)}</div>
+      </div>
+      <div class="metric-card green">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">Recebido</div>
+        <div style="font-size:20px;font-weight:700;color:var(--green)">${formatBRL(recebido)}</div>
+      </div>
+      <div class="metric-card ${corDif}">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">A receber</div>
+        <div style="font-size:20px;font-weight:700;color:var(--${corDif})">${formatBRL(diferenca)}</div>
+      </div>
+      <div class="metric-card">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">Nº entradas</div>
+        <div style="font-size:20px;font-weight:700">${dados.length}</div>
+      </div>
+    </div>
+
+    <div class="section-block">
+      <div class="section-block-header" style="flex-wrap:wrap;gap:10px">
+        <h3>Receitas <span class="badge badge-gray">${dados.length}</span></h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          ${mostrarCidFiltro ? `
+            <select class="filter-select" id="rec-fcid" onchange="setRecFiltro('cid', this.value)">
+              <option value="">Todas as cidades</option>
+              ${cidsVis.map(c => `<option value="${c.cidade}" ${recCidFiltro===c.cidade?'selected':''}>${c.nome}</option>`).join('')}
+            </select>` : ''}
+          <select class="filter-select" id="rec-fcat" onchange="setRecFiltro('cat', this.value)">
+            <option value="">Todas as categorias</option>
+            ${catsFiltroOpts.map(c => `<option value="${c}" ${recCatFiltro===c?'selected':''}>${c}</option>`).join('')}
+          </select>
+          <select class="filter-select" id="rec-fst" onchange="setRecFiltro('st', this.value)">
+            <option value="">Todos os status</option>
+            ${REC_STATUS.map(s => `<option value="${s}" ${recStatusFiltro===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+          ${podeEditar ? `<button class="btn btn-secondary btn-sm" onclick="abrirModalGerenciarCategoriasReceita()">+ Gerenciar categorias</button>` : ''}
+        </div>
+      </div>
+      ${dados.length === 0
+        ? `<div class="empty-state"><div class="icon">💰</div><p>Nenhuma receita encontrada com os filtros atuais.</p></div>`
+        : `<div class="table-wrap"><table>
+            <thead><tr>
+              <th>Data</th>
+              <th>Categoria</th>
+              <th>Cidade</th>
+              <th>Descrição</th>
+              <th style="text-align:right">Valor</th>
+              <th>Status</th>
+              <th>Responsável</th>
+              ${podeEditar ? '<th style="width:46px"></th>' : ''}
+            </tr></thead>
+            <tbody>
+              ${dados.map(r => `
+                <tr ${podeEditar ? `class="clickable" onclick="abrirModalReceita(${r._rowIndex})" title="Clique para editar"` : ''}>
+                  <td>${normalizarData(r.DATA) || '—'}</td>
+                  <td>${r.CATEGORIA || '—'}</td>
+                  <td>${cidadeNome((r.CIDADE||'').toLowerCase()) || r.CIDADE || '—'}</td>
+                  <td class="text-main">${r['DESCRIÇÃO'] || '—'}</td>
+                  <td style="text-align:right;font-weight:600">${formatBRL(parseBRL(r['VALOR (R$)'] || r.VALOR || 0))}</td>
+                  <td><span class="badge ${recBadgeClass(r.STATUS)}">${r.STATUS || '—'}</span></td>
+                  <td>${r['RESPONSÁVEL'] || '—'}</td>
+                  ${podeEditar ? `<td style="padding:4px 6px"><button class="btn-icon" title="Editar" onclick="event.stopPropagation();abrirModalReceita(${r._rowIndex})">✏️</button></td>` : ''}
+                </tr>`).join('')}
+            </tbody>
+          </table></div>`
+      }
+    </div>
+    ${podeEditar ? '<p style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center">💡 Clique em qualquer linha para editar a receita</p>' : ''}
+  `;
+}
+
+function setRecFiltro(tipo, val) {
+  if (tipo === 'cid') recCidFiltro = val;
+  if (tipo === 'cat') recCatFiltro = val;
+  if (tipo === 'st') recStatusFiltro = val;
+  renderReceitasView(document.getElementById('rec-content'));
+}
+
+function abrirModalReceita(rowIndex) {
+  const isEdicao = typeof rowIndex === 'number';
+  let r = {};
+  if (isEdicao) r = receitasData.find(x => x._rowIndex === rowIndex) || {};
+
+  const cidsVis = cidadesVisiveis();
+  // Categorias = mescla da aba + as usadas
+  const catsNosDados = [...new Set(receitasData.map(x => x.CATEGORIA).filter(Boolean))];
+  const cats = [...new Set([...recCatsList, ...catsNosDados])];
+
+  const catAtual = r.CATEGORIA || '';
+  const catEhConhecida = catAtual && cats.includes(catAtual);
+
+  const html = `
+    <div class="form-row col2">
+      <div class="form-group">
+        <label>Data *</label>
+        <input class="form-control" id="rf-data" type="date" value="${isoToInput(normalizarData(r.DATA || dataHoje()))}">
+      </div>
+      <div class="form-group">
+        <label>Cidade *</label>
+        <select class="form-control" id="rf-cidade">
+          ${cidsVis.map(c => `<option value="${c.cidade}" ${(r.CIDADE||'').toLowerCase()===c.cidade?'selected':''}>${c.nome}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-row col2">
+      <div class="form-group">
+        <label>Categoria *</label>
+        <select class="form-control" id="rf-cat-sel" onchange="recCatSelChange()">
+          <option value="">— selecionar —</option>
+          ${cats.map(c => `<option value="${c}" ${catAtual===c?'selected':''}>${c}</option>`).join('')}
+          <option value="__outra__" ${catAtual && !catEhConhecida ? 'selected':''}>Outra…</option>
+        </select>
+        <input class="form-control" id="rf-cat-outra" placeholder="Digite a nova categoria"
+               style="margin-top:6px;display:${catAtual && !catEhConhecida ? 'block':'none'}"
+               value="${catAtual && !catEhConhecida ? catAtual : ''}">
+      </div>
+      <div class="form-group">
+        <label>Status *</label>
+        <select class="form-control" id="rf-status">
+          ${REC_STATUS.map(s => `<option value="${s}" ${(r.STATUS||'Previsto')===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Descrição *</label>
+        <input class="form-control" id="rf-desc" value="${(r['DESCRIÇÃO']||'').replace(/"/g,'&quot;')}" placeholder="Ex: Patrocínio Prefeitura de Irecê">
+      </div>
+    </div>
+    <div class="form-row col2">
+      <div class="form-group">
+        <label>Valor (R$) *</label>
+        <input class="form-control" id="rf-valor" type="number" min="0" step="0.01" value="${parseBRL(r['VALOR (R$)']||r.VALOR||0).toFixed(2)}">
+      </div>
+      <div class="form-group">
+        <label>Responsável</label>
+        <input class="form-control" id="rf-resp" value="${(r['RESPONSÁVEL']||USUARIO.nome).replace(/"/g,'&quot;')}">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Observações</label>
+        <textarea class="form-control" id="rf-obs" rows="2">${r.OBS||''}</textarea>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--border)">
+      <button class="btn btn-secondary" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-primary" id="rf-btn" onclick="salvarReceita(${isEdicao ? rowIndex : 'null'})">
+        ${isEdicao ? 'Salvar Alterações' : 'Adicionar Receita'}
+      </button>
+    </div>
+  `;
+  abrirModal(isEdicao ? 'Editar Receita' : 'Nova Receita', html, true);
+}
+
+function recCatSelChange() {
+  const sel = document.getElementById('rf-cat-sel');
+  const inp = document.getElementById('rf-cat-outra');
+  if (!sel || !inp) return;
+  inp.style.display = sel.value === '__outra__' ? 'block' : 'none';
+  if (sel.value === '__outra__') inp.focus();
+}
+
+async function salvarReceita(rowIndex) {
+  const isEdicao = typeof rowIndex === 'number';
+  const btn = document.getElementById('rf-btn');
+
+  // Coleta
+  const dataInput = document.getElementById('rf-data').value;
+  const cidade = document.getElementById('rf-cidade').value;
+  const catSel = document.getElementById('rf-cat-sel').value;
+  const catOutra = document.getElementById('rf-cat-outra').value.trim();
+  const categoria = catSel === '__outra__' ? catOutra : catSel;
+  const status = document.getElementById('rf-status').value;
+  const desc = document.getElementById('rf-desc').value.trim();
+  const valor = parseFloat(document.getElementById('rf-valor').value || 0);
+  const resp = document.getElementById('rf-resp').value.trim();
+  const obs = document.getElementById('rf-obs').value.trim();
+
+  // Validações
+  if (!dataInput) { showToast('Informe a data', 'error'); return; }
+  if (!cidade) { showToast('Selecione a cidade', 'error'); return; }
+  if (!categoria) { showToast('Selecione ou digite uma categoria', 'error'); return; }
+  if (!desc) { showToast('Informe a descrição', 'error'); return; }
+  if (!(valor > 0)) { showToast('Valor deve ser maior que zero', 'error'); return; }
+
+  await btnRun(btn, async () => {
+    try {
+      const row = [
+        formatDateBR(dataInput),    // A DATA
+        categoria,                  // B CATEGORIA
+        cidade,                     // C CIDADE
+        desc,                       // D DESCRIÇÃO
+        valor.toFixed(2).replace('.', ','),  // E VALOR (R$)
+        status,                     // F STATUS
+        resp || USUARIO.nome,       // G RESPONSÁVEL
+        obs                         // H OBS
+      ];
+
+      if (isEdicao) {
+        await sheetsWrite(SHEET_GERAL, `Receitas!A${rowIndex}:H${rowIndex}`, [row]);
+      } else {
+        await sheetsAppend(SHEET_GERAL, 'Receitas!A:H', [row]);
+
+        // Se for categoria nova, grava na aba Categorias Receita
+        if (catSel === '__outra__' && categoria && !recCatsList.includes(categoria)) {
+          try {
+            await sheetsAppend(SHEET_GERAL, 'Categorias Receita!A:B', [[categoria, '']]);
+            cacheInvalidate(`${SHEET_GERAL}::Categorias Receita!A:B`);
+          } catch (e) { console.warn('Falha ao gravar categoria:', e); }
+        }
+      }
+
+      cacheInvalidate(`${SHEET_GERAL}::Receitas!A:H`);
+      showToast(isEdicao ? 'Receita atualizada' : 'Receita adicionada', 'success');
+      fecharModal();
+      await carregarReceitasFull();
+    } catch (e) {
+      showToast(`Erro: ${e.message}`, 'error');
+    }
+  });
+}
+
+async function abrirModalGerenciarCategoriasReceita() {
+  const html = `
+    <div id="rec-cats-list">
+      <div class="loading-state"><div class="spinner"></div><span>Carregando...</span></div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:flex-end;padding-top:12px;border-top:1px solid var(--border);margin-top:12px">
+      <div class="form-group" style="flex:1">
+        <label>Nova categoria</label>
+        <input class="form-control" id="rc-nova" placeholder="Ex: Patrocínio">
+      </div>
+      <button class="btn btn-primary" id="rc-btn-add" onclick="adicionarCategoriaReceita()">+ Adicionar</button>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;padding-top:16px;margin-top:12px;border-top:1px solid var(--border)">
+      <button class="btn btn-secondary" onclick="fecharModal()">Fechar</button>
+    </div>
+  `;
+  abrirModal('Categorias de Receita', html);
+  renderListaCategoriasReceita();
+}
+
+function renderListaCategoriasReceita() {
+  const div = document.getElementById('rec-cats-list');
+  if (!div) return;
+  if (!recCatsList.length) {
+    div.innerHTML = `<div class="empty-state" style="padding:20px"><p style="font-size:12px">Nenhuma categoria cadastrada ainda.</p></div>`;
+    return;
+  }
+  div.innerHTML = `
+    <div style="max-height:280px;overflow-y:auto">
+      ${recCatsList.map(c => `
+        <div style="display:flex;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px">
+          <span style="flex:1">${c}</span>
+        </div>
+      `).join('')}
+    </div>
+    <p style="font-size:11px;color:var(--text3);margin-top:8px">💡 Categorias não podem ser excluídas (podem ter receitas vinculadas).</p>
+  `;
+}
+
+async function adicionarCategoriaReceita() {
+  const inp = document.getElementById('rc-nova');
+  const btn = document.getElementById('rc-btn-add');
+  const nome = inp.value.trim();
+  if (!nome) { showToast('Digite o nome da categoria', 'error'); return; }
+  if (recCatsList.includes(nome)) { showToast('Categoria já existe', 'error'); return; }
+  await btnRun(btn, async () => {
+    try {
+      await sheetsAppend(SHEET_GERAL, 'Categorias Receita!A:B', [[nome, '']]);
+      cacheInvalidate(`${SHEET_GERAL}::Categorias Receita!A:B`);
+      recCatsList.push(nome);
+      inp.value = '';
+      renderListaCategoriasReceita();
+      showToast('Categoria adicionada', 'success');
+    } catch (e) {
+      showToast(`Erro: ${e.message}`, 'error');
+    }
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BLOCO 16 — ALERTAS & HISTÓRICO
+══════════════════════════════════════════════════════════════ */
+let alertasData = [];
+let alertCidFiltro = '';
+let alertTipoFiltro = '';
+let alertDtDe = '';
+let alertDtAte = '';
+
+async function iniciarAlertas() {
+  const content = document.getElementById('alert-content');
+  if (!content) return;
+  content.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>Carregando histórico...</span></div>`;
+  try {
+    const rows = await sheetsRead(SHEET_GERAL, 'Alertas & Histórico!A:I');
+    if (!rows || rows.length < 2) {
+      alertasData = [];
+    } else {
+      const h = rows[0];
+      alertasData = rows.slice(1).map((r, i) => {
+        const obj = rowToObj(h, r);
+        obj._rowIndex = i + 2;
+        return obj;
+      }).filter(r => r['DATA / HORA'] || r.DATA || r.ITEM || r['USUÁRIO']);
+    }
+    renderAlertasView(content);
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><p style="color:var(--red)">${e.message}</p></div>`;
+  }
+}
+
+function alertParseDataHora(str) {
+  // Espera "DD/MM/AAAA HH:MM" — retorna Date ou null
+  if (!str) return null;
+  const s = String(str).trim();
+  const partes = s.split(' ');
+  const dt = partes[0] || '';
+  const hr = partes[1] || '00:00';
+  const mDt = dt.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!mDt) return null;
+  const [hh, mm] = hr.split(':').map(n => parseInt(n) || 0);
+  return new Date(parseInt(mDt[3]), parseInt(mDt[2]) - 1, parseInt(mDt[1]), hh, mm);
+}
+
+function renderAlertasView(content) {
+  const p = USUARIO.perfil;
+  const cidsVis = cidadesVisiveis();
+
+  // Filtragem por perfil
+  let dados = alertasData;
+  if (p === 'prod') {
+    dados = dados.filter(r => (r.CIDADE || '').toLowerCase() === CIDADE_ATIVA);
+  }
+
+  // Filtros locais
+  if (alertCidFiltro) dados = dados.filter(r => (r.CIDADE || '').toLowerCase() === alertCidFiltro);
+  if (alertTipoFiltro) dados = dados.filter(r => (r.TIPO || '') === alertTipoFiltro);
+
+  if (alertDtDe || alertDtAte) {
+    const dDe = alertDtDe ? new Date(alertDtDe + 'T00:00:00') : null;
+    const dAte = alertDtAte ? new Date(alertDtAte + 'T23:59:59') : null;
+    dados = dados.filter(r => {
+      const dt = alertParseDataHora(r['DATA / HORA'] || r.DATA || '');
+      if (!dt) return false;
+      if (dDe && dt < dDe) return false;
+      if (dAte && dt > dAte) return false;
+      return true;
+    });
+  }
+
+  // Ordena: mais recente primeiro
+  dados = [...dados].sort((a, b) => {
+    const da = alertParseDataHora(a['DATA / HORA'] || a.DATA || '');
+    const db = alertParseDataHora(b['DATA / HORA'] || b.DATA || '');
+    if (!da && !db) return 0;
+    if (!da) return 1;
+    if (!db) return -1;
+    return db - da;
+  });
+
+  // Tipos únicos para o filtro
+  const tipos = [...new Set(alertasData.map(r => r.TIPO).filter(Boolean))].sort();
+
+  const mostrarCidFiltro = p !== 'prod' && cidsVis.length > 1;
+
+  content.innerHTML = `
+    <div class="section-block">
+      <div class="section-block-header" style="flex-wrap:wrap;gap:10px">
+        <h3>Trilha de Auditoria <span class="badge badge-gray">${dados.length}</span></h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          ${mostrarCidFiltro ? `
+            <select class="filter-select" id="alert-fcid" onchange="setAlertFiltro('cid', this.value)">
+              <option value="">Todas as cidades</option>
+              ${cidsVis.map(c => `<option value="${c.cidade}" ${alertCidFiltro===c.cidade?'selected':''}>${c.nome}</option>`).join('')}
+            </select>` : ''}
+          <select class="filter-select" id="alert-ftipo" onchange="setAlertFiltro('tipo', this.value)">
+            <option value="">Todos os tipos</option>
+            ${tipos.map(t => `<option value="${t}" ${alertTipoFiltro===t?'selected':''}>${t}</option>`).join('')}
+          </select>
+          <input type="date" class="filter-select" id="alert-fde" value="${alertDtDe}" onchange="setAlertFiltro('de', this.value)" title="De">
+          <input type="date" class="filter-select" id="alert-fate" value="${alertDtAte}" onchange="setAlertFiltro('ate', this.value)" title="Até">
+          <button class="btn btn-secondary btn-sm" onclick="limparFiltrosAlertas()">Limpar filtros</button>
+        </div>
+      </div>
+      ${dados.length === 0
+        ? `<div class="empty-state"><div class="icon">🔔</div><p>Nenhum registro encontrado com os filtros atuais.</p></div>`
+        : `<div class="table-wrap"><table>
+            <thead><tr>
+              <th>Data / Hora</th>
+              <th>Usuário</th>
+              <th>Item</th>
+              <th>Cidade</th>
+              <th style="text-align:right">Valor Anterior</th>
+              <th style="text-align:right">Novo Valor</th>
+              <th style="text-align:right">Variação</th>
+              <th>Tipo</th>
+              <th>Obs</th>
+            </tr></thead>
+            <tbody>
+              ${dados.map(r => {
+                const variacao = r['VARIAÇÃO (%)'] || r['VARIAÇÃO'] || '';
+                const variacaoNum = parseFloat(String(variacao).replace('%','').replace(',','.'));
+                let corVar = 'var(--text3)';
+                if (!isNaN(variacaoNum)) {
+                  corVar = variacaoNum < 0 ? 'var(--green)' : (variacaoNum > 0 ? 'var(--red)' : 'var(--text3)');
+                }
+                return `
+                <tr>
+                  <td style="white-space:nowrap">${r['DATA / HORA'] || r.DATA || '—'}</td>
+                  <td>${r['USUÁRIO'] || r.USUARIO || '—'}</td>
+                  <td class="text-main">${r.ITEM || '—'}</td>
+                  <td>${cidadeNome((r.CIDADE||'').toLowerCase()) || r.CIDADE || '—'}</td>
+                  <td style="text-align:right">${r['VALOR ANTERIOR (R$)'] ? formatBRL(parseBRL(r['VALOR ANTERIOR (R$)'])) : '—'}</td>
+                  <td style="text-align:right">${r['NOVO VALOR (R$)'] ? formatBRL(parseBRL(r['NOVO VALOR (R$)'])) : '—'}</td>
+                  <td style="text-align:right;color:${corVar};font-weight:600">${variacao || '—'}</td>
+                  <td>${r.TIPO ? `<span class="badge badge-gray">${r.TIPO}</span>` : '—'}</td>
+                  <td style="max-width:240px;white-space:normal;color:var(--text3);font-size:12px">${r.OBS || '—'}</td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table></div>`
+      }
+    </div>
+    <p style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center">📋 Registros gravados automaticamente nas edições de produção e aprovações de pagamento.</p>
+  `;
+}
+
+function setAlertFiltro(tipo, val) {
+  if (tipo === 'cid') alertCidFiltro = val;
+  if (tipo === 'tipo') alertTipoFiltro = val;
+  if (tipo === 'de') alertDtDe = val;
+  if (tipo === 'ate') alertDtAte = val;
+  renderAlertasView(document.getElementById('alert-content'));
+}
+
+function limparFiltrosAlertas() {
+  alertCidFiltro = '';
+  alertTipoFiltro = '';
+  alertDtDe = '';
+  alertDtAte = '';
+  renderAlertasView(document.getElementById('alert-content'));
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BLOCO 17 — DOCUMENTOS
+══════════════════════════════════════════════════════════════ */
+let docsData = [];
+let docCidFiltro = '';
+let docTipoFiltro = '';
+
+const DOC_TIPOS = ['Contrato', 'NF', 'Orçamento', 'Autorização', 'Relatório', 'Outro'];
+
+async function iniciarDocumentos() {
+  // Botão de header (mestre/fin/prod podem criar)
+  const p = USUARIO.perfil;
+  const podeCriar = p === 'mestre' || p === 'fin' || p === 'prod';
+  const headerActions = document.getElementById('doc-header-actions');
+  if (headerActions) {
+    headerActions.innerHTML = podeCriar
+      ? `<button class="btn btn-primary" onclick="abrirModalDocumento()">+ Novo documento</button>`
+      : '';
+  }
+  await carregarDocumentos();
+}
+
+async function carregarDocumentos() {
+  const content = document.getElementById('doc-content');
+  content.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>Carregando documentos...</span></div>`;
+  try {
+    const rows = await sheetsRead(SHEET_GERAL, 'Documentos!A:G');
+    if (!rows || rows.length < 2) {
+      docsData = [];
+    } else {
+      const h = rows[0];
+      docsData = rows.slice(1).map((r, i) => {
+        const obj = rowToObj(h, r);
+        obj._rowIndex = i + 2;
+        return obj;
+      }).filter(r => r.DATA || r['TÍTULO'] || r.TIPO);
+    }
+    renderDocumentosView(content);
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><p style="color:var(--red)">${e.message}</p></div>`;
+  }
+}
+
+function renderDocumentosView(content) {
+  const p = USUARIO.perfil;
+  const cidsVis = cidadesVisiveis();
+  const podeEditarTodos = p === 'mestre' || p === 'fin';
+
+  // Filtragem por perfil
+  let dados = docsData;
+  if (p === 'prod') {
+    dados = dados.filter(r => (r.CIDADE || '').toLowerCase() === CIDADE_ATIVA);
+  } else if (CIDADE_ATIVA && CIDADE_ATIVA !== 'todas') {
+    dados = dados.filter(r => (r.CIDADE || '').toLowerCase() === CIDADE_ATIVA);
+  }
+
+  // Filtros locais
+  if (docCidFiltro) dados = dados.filter(r => (r.CIDADE || '').toLowerCase() === docCidFiltro);
+  if (docTipoFiltro) dados = dados.filter(r => (r.TIPO || '') === docTipoFiltro);
+
+  // Ordena por data desc
+  dados = [...dados].sort((a, b) => {
+    const da = normalizarData(a.DATA || '');
+    const db = normalizarData(b.DATA || '');
+    // converte para YYYY-MM-DD para comparar
+    const isoA = isoToInput(da) || '0000-00-00';
+    const isoB = isoToInput(db) || '0000-00-00';
+    return isoB.localeCompare(isoA);
+  });
+
+  const mostrarCidFiltro = p !== 'prod' && cidsVis.length > 1;
+
+  content.innerHTML = `
+    <div class="section-block">
+      <div class="section-block-header" style="flex-wrap:wrap;gap:10px">
+        <h3>Documentos <span class="badge badge-gray">${dados.length}</span></h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          ${mostrarCidFiltro ? `
+            <select class="filter-select" id="doc-fcid" onchange="setDocFiltro('cid', this.value)">
+              <option value="">Todas as cidades</option>
+              ${cidsVis.map(c => `<option value="${c.cidade}" ${docCidFiltro===c.cidade?'selected':''}>${c.nome}</option>`).join('')}
+            </select>` : ''}
+          <select class="filter-select" id="doc-ftipo" onchange="setDocFiltro('tipo', this.value)">
+            <option value="">Todos os tipos</option>
+            ${DOC_TIPOS.map(t => `<option value="${t}" ${docTipoFiltro===t?'selected':''}>${t}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      ${dados.length === 0
+        ? `<div class="empty-state"><div class="icon">📁</div><p>Nenhum documento encontrado com os filtros atuais.</p></div>`
+        : `<div class="table-wrap"><table>
+            <thead><tr>
+              <th>Data</th>
+              <th>Tipo</th>
+              <th>Cidade</th>
+              <th>Título</th>
+              <th>Link</th>
+              <th>Responsável</th>
+              <th>Obs</th>
+              <th style="width:46px"></th>
+            </tr></thead>
+            <tbody>
+              ${dados.map(r => {
+                const ehDono = (r['RESPONSÁVEL'] || '').toLowerCase().trim() === (USUARIO.nome || '').toLowerCase().trim();
+                const podeEditarEste = podeEditarTodos || ehDono;
+                const link = (r['LINK DRIVE'] || r.LINK || '').trim();
+                const linkSeguro = link.replace(/"/g,'&quot;');
+                return `
+                <tr>
+                  <td style="white-space:nowrap">${normalizarData(r.DATA) || '—'}</td>
+                  <td>${r.TIPO ? `<span class="badge badge-gray">${r.TIPO}</span>` : '—'}</td>
+                  <td>${cidadeNome((r.CIDADE||'').toLowerCase()) || r.CIDADE || '—'}</td>
+                  <td class="text-main">${r['TÍTULO'] || '—'}</td>
+                  <td>${link
+                      ? `<a href="${linkSeguro}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-sm" style="text-decoration:none">↗ Abrir</a>`
+                      : '—'}</td>
+                  <td>${r['RESPONSÁVEL'] || '—'}</td>
+                  <td style="max-width:200px;white-space:normal;color:var(--text3);font-size:12px">${r.OBS || '—'}</td>
+                  <td style="padding:4px 6px">
+                    ${podeEditarEste ? `<button class="btn-icon" title="Editar" onclick="abrirModalDocumento(${r._rowIndex})">✏️</button>` : ''}
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table></div>`
+      }
+    </div>
+  `;
+}
+
+function setDocFiltro(tipo, val) {
+  if (tipo === 'cid') docCidFiltro = val;
+  if (tipo === 'tipo') docTipoFiltro = val;
+  renderDocumentosView(document.getElementById('doc-content'));
+}
+
+function abrirModalDocumento(rowIndex) {
+  const isEdicao = typeof rowIndex === 'number';
+  let d = {};
+  if (isEdicao) d = docsData.find(x => x._rowIndex === rowIndex) || {};
+
+  const p = USUARIO.perfil;
+  const cidsVis = cidadesVisiveis();
+
+  // Permissão de editar
+  if (isEdicao) {
+    const podeEditarTodos = p === 'mestre' || p === 'fin';
+    const ehDono = (d['RESPONSÁVEL'] || '').toLowerCase().trim() === (USUARIO.nome || '').toLowerCase().trim();
+    if (!podeEditarTodos && !ehDono) {
+      showToast('Você só pode editar documentos criados por você', 'error');
+      return;
+    }
+  }
+
+  // Cidade default: para prod, sua cidade
+  let cidadeDefault = d.CIDADE || (p === 'prod' ? USUARIO.cidade : (CIDADE_ATIVA && CIDADE_ATIVA !== 'todas' ? CIDADE_ATIVA : (cidsVis[0] && cidsVis[0].cidade) || ''));
+  cidadeDefault = String(cidadeDefault).toLowerCase();
+
+  const tipoAtual = d.TIPO || 'Contrato';
+
+  const html = `
+    <div class="form-row col2">
+      <div class="form-group">
+        <label>Data *</label>
+        <input class="form-control" id="df-data" type="date" value="${isoToInput(normalizarData(d.DATA || dataHoje()))}">
+      </div>
+      <div class="form-group">
+        <label>Tipo *</label>
+        <select class="form-control" id="df-tipo">
+          ${DOC_TIPOS.map(t => `<option value="${t}" ${tipoAtual===t?'selected':''}>${t}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-row col2">
+      <div class="form-group">
+        <label>Cidade *</label>
+        <select class="form-control" id="df-cidade" ${p === 'prod' ? 'disabled' : ''}>
+          ${cidsVis.map(c => `<option value="${c.cidade}" ${cidadeDefault===c.cidade?'selected':''}>${c.nome}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Responsável</label>
+        <input class="form-control" id="df-resp" value="${(d['RESPONSÁVEL']||USUARIO.nome).replace(/"/g,'&quot;')}">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Título *</label>
+        <input class="form-control" id="df-titulo" value="${(d['TÍTULO']||'').replace(/"/g,'&quot;')}" placeholder="Ex: Contrato Show Júnior — Irecê">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Link Drive</label>
+        <input class="form-control" id="df-link" value="${((d['LINK DRIVE']||d.LINK||'')).replace(/"/g,'&quot;')}" placeholder="Cole o link do Google Drive">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Observações</label>
+        <textarea class="form-control" id="df-obs" rows="2">${d.OBS||''}</textarea>
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--border)">
+      <button class="btn btn-secondary" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-primary" id="df-btn" onclick="salvarDocumento(${isEdicao ? rowIndex : 'null'})">
+        ${isEdicao ? 'Salvar Alterações' : 'Adicionar Documento'}
+      </button>
+    </div>
+  `;
+  abrirModal(isEdicao ? 'Editar Documento' : 'Novo Documento', html, true);
+}
+
+async function salvarDocumento(rowIndex) {
+  const isEdicao = typeof rowIndex === 'number';
+  const btn = document.getElementById('df-btn');
+
+  const dataInput = document.getElementById('df-data').value;
+  const tipo = document.getElementById('df-tipo').value;
+  const cidadeSel = document.getElementById('df-cidade');
+  const cidade = cidadeSel.disabled ? USUARIO.cidade : cidadeSel.value;
+  const titulo = document.getElementById('df-titulo').value.trim();
+  const link = document.getElementById('df-link').value.trim();
+  const resp = document.getElementById('df-resp').value.trim();
+  const obs = document.getElementById('df-obs').value.trim();
+
+  if (!dataInput) { showToast('Informe a data', 'error'); return; }
+  if (!tipo) { showToast('Selecione o tipo', 'error'); return; }
+  if (!cidade) { showToast('Selecione a cidade', 'error'); return; }
+  if (!titulo) { showToast('Informe o título', 'error'); return; }
+
+  await btnRun(btn, async () => {
+    try {
+      const row = [
+        formatDateBR(dataInput),  // A DATA
+        tipo,                     // B TIPO
+        cidade,                   // C CIDADE
+        titulo,                   // D TÍTULO
+        link,                     // E LINK DRIVE
+        resp || USUARIO.nome,     // F RESPONSÁVEL
+        obs                       // G OBS
+      ];
+
+      if (isEdicao) {
+        await sheetsWrite(SHEET_GERAL, `Documentos!A${rowIndex}:G${rowIndex}`, [row]);
+      } else {
+        await sheetsAppend(SHEET_GERAL, 'Documentos!A:G', [row]);
+      }
+
+      cacheInvalidate(`${SHEET_GERAL}::Documentos!A:G`);
+      showToast(isEdicao ? 'Documento atualizado' : 'Documento adicionado', 'success');
+      fecharModal();
+      await carregarDocumentos();
+    } catch (e) {
+      showToast(`Erro: ${e.message}`, 'error');
+    }
+  });
+}
+
+/* ══════════════════════════════════════════════════════════════
+   BLOCO 18 — CONFIGURAÇÕES
+══════════════════════════════════════════════════════════════ */
+let configSecao = 'usuarios';     // 'usuarios' | 'cidades'
+let configUsuariosRaw = [];       // dados crus da aba Usuários (com _rowIndex)
+let configCidadesRaw = [];        // dados crus da aba Cidades (com _rowIndex)
+
+const PERFIS_VALIDOS = ['mestre', 'fin', 'prod', 'socio', 'vend'];
+
+function badgePerfil(perfil) {
+  const p = (perfil || '').toLowerCase();
+  if (p === 'mestre') return `<span class="badge" style="background:rgba(167,139,250,0.15);color:var(--purple);border:1px solid rgba(167,139,250,0.3)">Mestre</span>`;
+  if (p === 'fin') return `<span class="badge badge-blue">Financeiro</span>`;
+  if (p === 'prod') return `<span class="badge badge-accent">Produtor</span>`;
+  if (p === 'socio') return `<span class="badge badge-green">Sócio</span>`;
+  if (p === 'vend') return `<span class="badge badge-gray">Vendas</span>`;
+  return `<span class="badge badge-gray">${perfil || '—'}</span>`;
+}
+
+async function iniciarConfig() {
+  // Acesso apenas para mestre
+  if (USUARIO.perfil !== 'mestre') {
+    document.getElementById('config-content').innerHTML = `
+      <div class="empty-state"><div class="icon">🔒</div><p>Apenas o perfil <strong>Mestre</strong> pode acessar as Configurações.</p></div>`;
+    return;
+  }
+  await carregarConfigDados();
+}
+
+async function carregarConfigDados() {
+  const content = document.getElementById('config-content');
+  content.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>Carregando configurações...</span></div>`;
+  try {
+    const [usrRows, cidRows] = await Promise.all([
+      sheetsRead(SHEET_GERAL, 'Usuários!A:F', false),
+      sheetsRead(SHEET_GERAL, 'Cidades!A:D', false)
+    ]);
+
+    // USUÁRIOS
+    if (!usrRows || usrRows.length < 2) {
+      configUsuariosRaw = [];
+    } else {
+      const h = usrRows[0];
+      configUsuariosRaw = usrRows.slice(1).map((r, i) => {
+        const obj = rowToObj(h, r);
+        obj._rowIndex = i + 2;
+        return obj;
+      }).filter(u => u['CÓDIGO']);
+    }
+
+    // CIDADES
+    if (!cidRows || cidRows.length < 2) {
+      configCidadesRaw = [];
+    } else {
+      const h = cidRows[0];
+      configCidadesRaw = cidRows.slice(1).map((r, i) => {
+        const obj = rowToObj(h, r);
+        obj._rowIndex = i + 2;
+        return obj;
+      }).filter(c => c.CIDADE);
+    }
+
+    renderConfigView(content);
+  } catch (e) {
+    content.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><p style="color:var(--red)">${e.message}</p></div>`;
+  }
+}
+
+function renderConfigView(content) {
+  content.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:0">
+      <button class="btn ${configSecao==='usuarios'?'btn-primary':'btn-secondary'}" style="border-radius:6px 6px 0 0" onclick="setConfigSecao('usuarios')">👥 Usuários</button>
+      <button class="btn ${configSecao==='cidades'?'btn-primary':'btn-secondary'}" style="border-radius:6px 6px 0 0" onclick="setConfigSecao('cidades')">🏙️ Cidades</button>
+    </div>
+    <div id="config-secao-body"></div>
+  `;
+  renderConfigSecao();
+}
+
+function setConfigSecao(secao) {
+  configSecao = secao;
+  renderConfigView(document.getElementById('config-content'));
+}
+
+function renderConfigSecao() {
+  const body = document.getElementById('config-secao-body');
+  if (!body) return;
+  if (configSecao === 'usuarios') renderConfigUsuarios(body);
+  else if (configSecao === 'cidades') renderConfigCidades(body);
+}
+
+/* ─── SEÇÃO USUÁRIOS ─── */
+function renderConfigUsuarios(body) {
+  const dados = configUsuariosRaw;
+  body.innerHTML = `
+    <div class="section-block">
+      <div class="section-block-header" style="flex-wrap:wrap;gap:10px">
+        <h3>Usuários do Sistema <span class="badge badge-gray">${dados.length}</span></h3>
+        <button class="btn btn-primary" onclick="abrirModalUsuario()">+ Novo usuário</button>
+      </div>
+      ${dados.length === 0
+        ? `<div class="empty-state"><div class="icon">👥</div><p>Nenhum usuário cadastrado.</p></div>`
+        : `<div class="table-wrap"><table>
+            <thead><tr>
+              <th>Código</th>
+              <th>Nome</th>
+              <th>Perfil</th>
+              <th>Cidade</th>
+              <th>WhatsApp</th>
+              <th>Ativo</th>
+              <th style="width:96px">Ações</th>
+            </tr></thead>
+            <tbody>
+              ${dados.map(u => {
+                const codigo = (u['CÓDIGO'] || '').trim();
+                const ehProprio = codigo === USUARIO.codigo;
+                const ativo = (u.ATIVO || '').toUpperCase() === 'SIM';
+                return `
+                <tr>
+                  <td style="font-family:monospace;font-weight:600">${codigo}</td>
+                  <td>${u.NOME || '—'}</td>
+                  <td>${badgePerfil(u.PERFIL)}</td>
+                  <td>${u.CIDADE ? (cidadeNome((u.CIDADE||'').toLowerCase()) || u.CIDADE) : '—'}</td>
+                  <td style="font-family:monospace;font-size:12px">${u.WHATSAPP || '—'}</td>
+                  <td>${ativo ? `<span class="badge badge-green">Sim</span>` : `<span class="badge badge-gray">Não</span>`}</td>
+                  <td style="padding:4px 6px;white-space:nowrap">
+                    <button class="btn-icon" title="Editar" onclick="abrirModalUsuario(${u._rowIndex})">✏️</button>
+                    ${ehProprio
+                      ? `<button class="btn-icon" title="Não é possível desativar a si mesmo" disabled style="opacity:0.3;cursor:not-allowed">${ativo?'🔒':'🔒'}</button>`
+                      : `<button class="btn-icon" title="${ativo?'Desativar':'Ativar'}" onclick="toggleUsuarioAtivo(${u._rowIndex})">${ativo?'⏸️':'▶️'}</button>`}
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table></div>`
+      }
+    </div>
+  `;
+}
+
+function abrirModalUsuario(rowIndex) {
+  const isEdicao = typeof rowIndex === 'number';
+  let u = {};
+  if (isEdicao) u = configUsuariosRaw.find(x => x._rowIndex === rowIndex) || {};
+
+  const perfilAtual = (u.PERFIL || 'prod').toLowerCase();
+  const codigoAtual = (u['CÓDIGO'] || '').trim();
+  const cidadeAtual = (u.CIDADE || '').toLowerCase().replace(/[—–]/g, '').trim();
+  const isProprioMestre = codigoAtual === USUARIO.codigo && perfilAtual === 'mestre';
+
+  const html = `
+    <div class="form-row col2">
+      <div class="form-group">
+        <label>Código *</label>
+        <input class="form-control" id="uf-codigo" value="${codigoAtual}" placeholder="Ex: CRUZ02" style="text-transform:uppercase;font-family:monospace" ${isEdicao?'readonly':''}>
+        <span style="font-size:11px;color:var(--text3);margin-top:4px">${isEdicao?'Código não pode ser alterado após criação':'Letras maiúsculas — sem espaços'}</span>
+      </div>
+      <div class="form-group">
+        <label>Nome *</label>
+        <input class="form-control" id="uf-nome" value="${(u.NOME||'').replace(/"/g,'&quot;')}" placeholder="Nome completo">
+      </div>
+    </div>
+    <div class="form-row col2">
+      <div class="form-group">
+        <label>Perfil *</label>
+        <select class="form-control" id="uf-perfil" onchange="ufPerfilChange()" ${isProprioMestre?'disabled':''}>
+          ${PERFIS_VALIDOS.map(p => `<option value="${p}" ${perfilAtual===p?'selected':''}>${p}</option>`).join('')}
+        </select>
+        ${isProprioMestre ? '<span style="font-size:11px;color:var(--text3);margin-top:4px">Não é possível alterar seu próprio perfil de Mestre</span>' : ''}
+      </div>
+      <div class="form-group" id="uf-cidade-wrap" style="display:${perfilAtual==='prod'?'flex':'none'}">
+        <label>Cidade *</label>
+        <select class="form-control" id="uf-cidade">
+          <option value="">— selecionar —</option>
+          ${CIDADES.map(c => `<option value="${c.cidade}" ${cidadeAtual===c.cidade?'selected':''}>${c.nome}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="form-row col2">
+      <div class="form-group">
+        <label>WhatsApp</label>
+        <input class="form-control" id="uf-whatsapp" value="${(u.WHATSAPP||'').replace(/"/g,'&quot;')}" placeholder="5571999999999">
+        <span style="font-size:11px;color:var(--text3);margin-top:4px">Com DDI + DDD, apenas números</span>
+      </div>
+      <div class="form-group">
+        <label>Ativo *</label>
+        <select class="form-control" id="uf-ativo" ${codigoAtual===USUARIO.codigo?'disabled':''}>
+          <option value="SIM" ${(u.ATIVO||'SIM').toUpperCase()==='SIM'?'selected':''}>SIM</option>
+          <option value="NÃO" ${(u.ATIVO||'').toUpperCase()==='NÃO'?'selected':''}>NÃO</option>
+        </select>
+        ${codigoAtual===USUARIO.codigo ? '<span style="font-size:11px;color:var(--text3);margin-top:4px">Você não pode desativar a si mesmo</span>' : ''}
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--border)">
+      <button class="btn btn-secondary" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-primary" id="uf-btn" onclick="salvarUsuario(${isEdicao ? rowIndex : 'null'})">
+        ${isEdicao ? 'Salvar Alterações' : 'Criar Usuário'}
+      </button>
+    </div>
+  `;
+  abrirModal(isEdicao ? 'Editar Usuário' : 'Novo Usuário', html, true);
+}
+
+function ufPerfilChange() {
+  const sel = document.getElementById('uf-perfil');
+  const wrap = document.getElementById('uf-cidade-wrap');
+  if (!sel || !wrap) return;
+  wrap.style.display = sel.value === 'prod' ? 'flex' : 'none';
+}
+
+async function salvarUsuario(rowIndex) {
+  const isEdicao = typeof rowIndex === 'number';
+  const btn = document.getElementById('uf-btn');
+
+  const codigo = document.getElementById('uf-codigo').value.trim().toUpperCase();
+  const nome = document.getElementById('uf-nome').value.trim();
+  const perfilEl = document.getElementById('uf-perfil');
+  const perfil = perfilEl.disabled ? (configUsuariosRaw.find(x=>x._rowIndex===rowIndex)?.PERFIL || '').toLowerCase() : perfilEl.value;
+  const cidade = perfil === 'prod' ? (document.getElementById('uf-cidade').value || '') : '—';
+  const whatsapp = document.getElementById('uf-whatsapp').value.trim();
+  const ativoEl = document.getElementById('uf-ativo');
+  const ativo = ativoEl.disabled ? 'SIM' : ativoEl.value;
+
+  // Validações
+  if (!codigo) { showToast('Informe o código', 'error'); return; }
+  if (!/^[A-Z0-9]+$/.test(codigo)) { showToast('Código deve conter apenas letras maiúsculas e números', 'error'); return; }
+  if (!nome) { showToast('Informe o nome', 'error'); return; }
+  if (!PERFIS_VALIDOS.includes(perfil)) { showToast('Perfil inválido', 'error'); return; }
+  if (perfil === 'prod' && !cidade) { showToast('Selecione a cidade do produtor', 'error'); return; }
+
+  // Código único (na criação) e proteção do MESTRE01
+  if (!isEdicao) {
+    const existe = configUsuariosRaw.some(u => (u['CÓDIGO']||'').trim().toUpperCase() === codigo);
+    if (existe) { showToast(`Código ${codigo} já existe`, 'error'); return; }
+  }
+
+  await btnRun(btn, async () => {
+    try {
+      const row = [
+        codigo,                    // A CÓDIGO
+        nome,                      // B NOME
+        perfil,                    // C PERFIL
+        cidade,                    // D CIDADE
+        whatsapp,                  // E WHATSAPP
+        ativo                      // F ATIVO
+      ];
+
+      if (isEdicao) {
+        await sheetsWrite(SHEET_GERAL, `Usuários!A${rowIndex}:F${rowIndex}`, [row]);
+      } else {
+        await sheetsAppend(SHEET_GERAL, 'Usuários!A:F', [row]);
+      }
+
+      cacheInvalidate(`${SHEET_GERAL}::Usuários!A:F`);
+      await recarregarUsuariosGlobal();
+      showToast(isEdicao ? 'Usuário atualizado' : 'Usuário criado', 'success');
+      fecharModal();
+      await carregarConfigDados();
+    } catch (e) {
+      showToast(`Erro: ${e.message}`, 'error');
+    }
+  });
+}
+
+async function toggleUsuarioAtivo(rowIndex) {
+  const u = configUsuariosRaw.find(x => x._rowIndex === rowIndex);
+  if (!u) return;
+  const codigo = (u['CÓDIGO'] || '').trim();
+  if (codigo === USUARIO.codigo) { showToast('Você não pode desativar a si mesmo', 'error'); return; }
+  const ativoAtual = (u.ATIVO || '').toUpperCase() === 'SIM';
+  const novoAtivo = ativoAtual ? 'NÃO' : 'SIM';
+  const acao = ativoAtual ? 'desativar' : 'ativar';
+  if (!confirm(`Deseja ${acao} o usuário ${codigo} (${u.NOME || ''})?`)) return;
+
+  try {
+    // Reescreve apenas a coluna F dessa linha
+    await sheetsWrite(SHEET_GERAL, `Usuários!F${rowIndex}`, [[novoAtivo]]);
+    cacheInvalidate(`${SHEET_GERAL}::Usuários!A:F`);
+    await recarregarUsuariosGlobal();
+    showToast(`Usuário ${ativoAtual ? 'desativado' : 'ativado'}`, 'success');
+    await carregarConfigDados();
+  } catch (e) {
+    showToast(`Erro: ${e.message}`, 'error');
+  }
+}
+
+async function recarregarUsuariosGlobal() {
+  const rows = await sheetsRead(SHEET_GERAL, 'Usuários!A:F', false);
+  if (!rows || rows.length < 2) { USUARIOS = []; return; }
+  const h = rows[0];
+  USUARIOS = rows.slice(1)
+    .map(r => rowToObj(h, r))
+    .filter(u => u['CÓDIGO'] && (u.ATIVO || '').toUpperCase() === 'SIM')
+    .map(u => ({
+      codigo: u['CÓDIGO'].trim(),
+      nome: u.NOME || u['CÓDIGO'],
+      perfil: (u.PERFIL || '').toLowerCase(),
+      cidade: (u.CIDADE || '').toLowerCase().replace(/[—–]/g, '').trim(),
+      whatsapp: u.WHATSAPP || ''
+    }));
+}
+
+/* ─── SEÇÃO CIDADES ─── */
+function renderConfigCidades(body) {
+  const dados = configCidadesRaw;
+  body.innerHTML = `
+    <div class="section-block">
+      <div class="section-block-header" style="flex-wrap:wrap;gap:10px">
+        <h3>Cidades & PPPs <span class="badge badge-gray">${dados.length}</span></h3>
+        <button class="btn btn-primary" onclick="abrirModalCidade()">+ Nova cidade</button>
+      </div>
+      ${dados.length === 0
+        ? `<div class="empty-state"><div class="icon">🏙️</div><p>Nenhuma cidade cadastrada.</p></div>`
+        : `<div class="table-wrap"><table>
+            <thead><tr>
+              <th>Código</th>
+              <th>Nome</th>
+              <th>ID Sheet (PPP)</th>
+              <th>Ativo</th>
+              <th style="width:46px">Ações</th>
+            </tr></thead>
+            <tbody>
+              ${dados.map(c => {
+                const ativo = (c.ATIVO || '').toUpperCase() === 'SIM';
+                const idSheet = c['ID_SHEET'] || c['ID SHEET'] || '';
+                return `
+                <tr>
+                  <td style="font-family:monospace;font-weight:600">${c.CIDADE || '—'}</td>
+                  <td>${c.NOME || '—'}</td>
+                  <td style="font-family:monospace;font-size:11px;color:var(--text3);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${idSheet}">${idSheet || '—'}</td>
+                  <td>${ativo ? `<span class="badge badge-green">Sim</span>` : `<span class="badge badge-gray">Não</span>`}</td>
+                  <td style="padding:4px 6px">
+                    <button class="btn-icon" title="Editar" onclick="abrirModalCidade(${c._rowIndex})">✏️</button>
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table></div>`
+      }
+    </div>
+  `;
+}
+
+function abrirModalCidade(rowIndex) {
+  const isEdicao = typeof rowIndex === 'number';
+  let c = {};
+  if (isEdicao) c = configCidadesRaw.find(x => x._rowIndex === rowIndex) || {};
+
+  const idSheet = c['ID_SHEET'] || c['ID SHEET'] || '';
+
+  const html = `
+    <div class="form-row col2">
+      <div class="form-group">
+        <label>Código *</label>
+        <input class="form-control" id="cf-codigo" value="${(c.CIDADE||'').replace(/"/g,'&quot;')}" placeholder="Ex: cruz" style="text-transform:lowercase;font-family:monospace" ${isEdicao?'readonly':''}>
+        <span style="font-size:11px;color:var(--text3);margin-top:4px">Minúsculas, sem acento e sem espaço${isEdicao?' — não pode ser alterado':''}</span>
+      </div>
+      <div class="form-group">
+        <label>Nome *</label>
+        <input class="form-control" id="cf-nome" value="${(c.NOME||'').replace(/"/g,'&quot;')}" placeholder="Ex: Cruz das Almas">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>ID Sheet (PPP) *</label>
+        <input class="form-control" id="cf-idsheet" value="${idSheet.replace(/"/g,'&quot;')}" placeholder="ID da planilha Google" style="font-family:monospace;font-size:12px">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Ativo *</label>
+        <select class="form-control" id="cf-ativo">
+          <option value="SIM" ${(c.ATIVO||'SIM').toUpperCase()==='SIM'?'selected':''}>SIM</option>
+          <option value="NÃO" ${(c.ATIVO||'').toUpperCase()==='NÃO'?'selected':''}>NÃO</option>
+        </select>
+      </div>
+    </div>
+    ${!isEdicao ? `
+      <div style="background:var(--accent-dim);border:1px solid var(--accent-dim2);border-radius:var(--radius-sm);padding:12px;margin-bottom:16px;font-size:12px;color:var(--text2)">
+        ⚠️ <strong>Lembre-se:</strong> após criar a cidade, compartilhe a planilha PPP com a service account:<br>
+        <code style="display:block;margin-top:6px;padding:6px 8px;background:var(--bg);border-radius:4px;font-size:11px;word-break:break-all">saojoao2026@saojoao2026-allinmusic.iam.gserviceaccount.com</code>
+      </div>
+    ` : ''}
+    <div style="display:flex;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--border)">
+      <button class="btn btn-secondary" onclick="fecharModal()">Cancelar</button>
+      <button class="btn btn-primary" id="cf-btn" onclick="salvarCidade(${isEdicao ? rowIndex : 'null'})">
+        ${isEdicao ? 'Salvar Alterações' : 'Criar Cidade'}
+      </button>
+    </div>
+  `;
+  abrirModal(isEdicao ? 'Editar Cidade' : 'Nova Cidade', html, true);
+}
+
+async function salvarCidade(rowIndex) {
+  const isEdicao = typeof rowIndex === 'number';
+  const btn = document.getElementById('cf-btn');
+
+  const codigo = document.getElementById('cf-codigo').value.trim().toLowerCase();
+  const nome = document.getElementById('cf-nome').value.trim();
+  const idSheet = document.getElementById('cf-idsheet').value.trim();
+  const ativo = document.getElementById('cf-ativo').value;
+
+  if (!codigo) { showToast('Informe o código', 'error'); return; }
+  if (!/^[a-z0-9_]+$/.test(codigo)) { showToast('Código: apenas letras minúsculas, números e underscore', 'error'); return; }
+  if (!nome) { showToast('Informe o nome', 'error'); return; }
+  if (!idSheet) { showToast('Informe o ID da planilha PPP', 'error'); return; }
+
+  if (!isEdicao) {
+    const existe = configCidadesRaw.some(c => (c.CIDADE||'').trim().toLowerCase() === codigo);
+    if (existe) { showToast(`Código ${codigo} já existe`, 'error'); return; }
+  }
+
+  await btnRun(btn, async () => {
+    try {
+      const row = [codigo, nome, idSheet, ativo];
+
+      if (isEdicao) {
+        await sheetsWrite(SHEET_GERAL, `Cidades!A${rowIndex}:D${rowIndex}`, [row]);
+      } else {
+        await sheetsAppend(SHEET_GERAL, 'Cidades!A:D', [row]);
+      }
+
+      cacheInvalidate(`${SHEET_GERAL}::Cidades!A:D`);
+      await recarregarCidadesGlobal();
+      showToast(isEdicao ? 'Cidade atualizada' : 'Cidade criada', 'success');
+      fecharModal();
+      await carregarConfigDados();
+    } catch (e) {
+      showToast(`Erro: ${e.message}`, 'error');
+    }
+  });
+}
+
+async function recarregarCidadesGlobal() {
+  const rows = await sheetsRead(SHEET_GERAL, 'Cidades!A:D', false);
+  if (!rows || rows.length < 2) { CIDADES = []; return; }
+  const h = rows[0];
+  CIDADES = rows.slice(1)
+    .map(r => rowToObj(h, r))
+    .filter(c => c.CIDADE && (c.ATIVO || '').toUpperCase() === 'SIM')
+    .map(c => ({
+      cidade: c.CIDADE.toLowerCase().trim(),
+      nome: c.NOME || c.CIDADE,
+      idSheet: c['ID_SHEET'] || c['ID SHEET'] || '',
+      ativo: (c.ATIVO || 'SIM').toUpperCase()
+    }));
+  // Atualiza sessão e topbar
+  try { sessionStorage.setItem('cidades', JSON.stringify(CIDADES)); } catch(e) {}
+  renderTopbarCidade();
+  // Atualiza sidebar (caso buildNavItems dependa de cidades)
+  renderSidebar();
 }
 
 /* ══════════════════════════════════════════════════════════════
