@@ -979,6 +979,34 @@ async function carregarProducao(sheetId) {
   return { totalOrcado, totalPago, totalCusto25, countItens, porCategoria, statusCount };
 }
 
+async function carregarReceitas() {
+  // Lê aba Receitas da planilha Geral: DATA | CATEGORIA | CIDADE | DESCRIÇÃO | VALOR | STATUS | RESPONSÁVEL | OBS
+  try {
+    const rows = await sheetsRead(SHEET_GERAL, 'Receitas!A:H');
+    if (!rows || rows.length < 2) return { porCidade: {}, total: 0 };
+
+    const COL_R = { DATA:0, CAT:1, CIDADE:2, DESC:3, VALOR:4, STATUS:5 };
+    const porCidade = {};
+    let total = 0;
+
+    for (const row of rows.slice(1)) {
+      if (!row || !row.some(c => c)) continue;
+      const valor = parseBRL(row[COL_R.VALOR]);
+      if (valor <= 0) continue;
+
+      const cidade = (row[COL_R.CIDADE] || '').trim().toLowerCase();
+      if (!cidade) continue;
+
+      porCidade[cidade] = (porCidade[cidade] || 0) + valor;
+      total += valor;
+    }
+    return { porCidade, total };
+  } catch (e) {
+    console.warn('Erro ao carregar receitas:', e);
+    return { porCidade: {}, total: 0 };
+  }
+}
+
 async function renderDashboard() {
   const content = document.getElementById('dashContent');
   const cidadeLabel = CIDADE_ATIVA === 'todas' ? 'Todas as cidades' : cidadeNome(CIDADE_ATIVA);
@@ -990,8 +1018,10 @@ async function renderDashboard() {
     const porCategoria = {};
     const statusCount = {};
 
+    // Carrega produção e receitas em paralelo
+    const receitasPromise = carregarReceitas();
+
     if (CIDADE_ATIVA === 'todas') {
-      // Soma todas as cidades em paralelo
       const resultados = await Promise.all(
         CIDADES.map(c => c.idSheet ? carregarProducao(c.idSheet).catch(() => null) : Promise.resolve(null))
       );
@@ -1023,19 +1053,42 @@ async function renderDashboard() {
       Object.assign(statusCount, r.statusCount);
     }
 
+    // Receita prevista (filtra por cidade ou soma todas)
+    const receitas = await receitasPromise;
+    let totalReceita = 0;
+    if (CIDADE_ATIVA === 'todas') {
+      totalReceita = receitas.total;
+    } else {
+      totalReceita = receitas.porCidade[CIDADE_ATIVA] || 0;
+    }
+
     const totalPendente = totalOrcado - totalPago;
     const pctPago = totalOrcado > 0 ? (totalPago / totalOrcado * 100) : 0;
+    const resultado = totalReceita - totalOrcado; // positivo = lucro
+    const resultadoPositivo = resultado >= 0;
     const cats = Object.entries(porCategoria).sort((a,b) => b[1].orcado - a[1].orcado);
     const statusEntries = Object.entries(statusCount).sort((a,b) => b[1]-a[1]);
 
     content.innerHTML = `
       <!-- Cards principais -->
       <div class="cards-grid">
+        <div class="metric-card blue">
+          <div class="metric-icon">💵</div>
+          <div class="metric-label">Receita Prevista</div>
+          <div class="metric-value sm">${formatBRL(totalReceita)}</div>
+          <div class="metric-sub">previsão total de entrada</div>
+        </div>
         <div class="metric-card accent">
           <div class="metric-icon">📋</div>
           <div class="metric-label">Orçamento 2026</div>
           <div class="metric-value sm">${formatBRL(totalOrcado)}</div>
           <div class="metric-sub">${countItens} itens com status</div>
+        </div>
+        <div class="metric-card ${resultadoPositivo ? 'green' : 'red'}">
+          <div class="metric-icon">${resultadoPositivo ? '📈' : '📉'}</div>
+          <div class="metric-label">Resultado Previsto</div>
+          <div class="metric-value sm" style="color:${resultadoPositivo ? 'var(--green)' : 'var(--red)'}">${formatBRL(resultado)}</div>
+          <div class="metric-sub">receita − orçamento</div>
         </div>
         <div class="metric-card green">
           <div class="metric-icon">✅</div>
