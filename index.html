@@ -356,15 +356,15 @@ select.filter-select {
 select.filter-select:focus { border-color: var(--accent); }
 
 /* ── TABLE STICKY ── */
-.table-prod-wrap { overflow-x: auto; }
+.table-prod-wrap { overflow-x: auto; overflow-y: auto; max-height: calc(100vh - 260px); }
 .table-prod-wrap table { min-width: 900px; }
 /* Scroll espelhado no topo */
 .table-scroll-top { overflow-x: auto; overflow-y: hidden; height: 12px; }
 .table-scroll-top-inner { height: 1px; }
-/* Thead congelado */
-.table-prod-wrap thead th { position: sticky; top: 0; background: var(--bg2); z-index: 2; }
+/* Thead congelado — sticky relativo ao contêiner com overflow */
+.table-prod-wrap thead th { position: sticky; top: 0; background: var(--bg2); z-index: 2; box-shadow: 0 1px 0 var(--border); }
 .table-prod-wrap th:first-child,
-.table-prod-wrap td:first-child { position: sticky; left: 0; background: var(--bg2); z-index: 1; }
+.table-prod-wrap td:first-child { position: sticky; left: 0; background: var(--bg2); z-index: 1; min-width: 36px; }
 .table-prod-wrap thead th:first-child { z-index: 3; }
 .table-prod-wrap tr:hover td:first-child { background: var(--bg3); }
 td.total-col { color: var(--accent); font-weight: 700; }
@@ -374,7 +374,7 @@ tfoot td:first-child { position: sticky; left: 0; background: var(--bg2); z-inde
 .btn-icon:hover { background: var(--bg4); }
 /* Item cancelado riscado */
 tr.cancelado td { text-decoration: line-through; opacity: 0.5; }
-tr.cancelado td:last-child { text-decoration: none; opacity: 1; }
+tr.cancelado td:first-child { text-decoration: none; opacity: 1; }
 
 /* ── MODAL GLOBAL ── */
 #modal {
@@ -1512,6 +1512,7 @@ function renderProdTabela() {
     <table id="prod-table-el">
       <thead>
         <tr>
+          ${canEdit ? '<th style="width:36px"></th>' : ''}
           <th>Item</th>
           <th>Categoria</th>
           <th>Subcategoria</th>
@@ -1525,7 +1526,6 @@ function renderProdTabela() {
           <th>Valor Pago</th>
           <th>Status</th>
           <th>Fornecedor</th>
-          ${canEdit ? '<th></th>' : ''}
         </tr>
       </thead>
       <tbody>
@@ -1538,6 +1538,7 @@ function renderProdTabela() {
           const cancelado = st === 'Item cancelado';
           return `
           <tr class="${cancelado ? 'cancelado' : ''}">
+            ${canEdit ? `<td style="width:36px;padding:4px 6px"><button class="btn-icon" title="Editar" onclick='event.stopPropagation();abrirModalProd(${r._rowIndex})'>✏️</button></td>` : ''}
             <td class="text-main">${r.ITEM || '—'}</td>
             <td>${r.CATEGORIA || '—'}</td>
             <td>${r.SUBCATEGORIA || '—'}</td>
@@ -1551,18 +1552,17 @@ function renderProdTabela() {
             <td style="color:var(--green)">${formatBRL(pago)}</td>
             <td><span class="badge ${badgeProdStatus(st)}">${st || '—'}</span></td>
             <td>${r['FORNECEDOR'] || '—'}</td>
-            ${canEdit ? `<td><button class="btn-icon" title="Editar" onclick='event.stopPropagation();abrirModalProd(${r._rowIndex})'>✏️</button></td>` : ''}
           </tr>`;
         }).join('')}
       </tbody>
       <tfoot>
         <tr>
-          <td colspan="7">Totais (${dados.length} itens)</td>
+          <td colspan="${canEdit ? 8 : 7}">Totais (${dados.length} itens)</td>
           <td>${formatBRL(totCusto25)}</td>
           <td class="total-col">${formatBRL(totOrc)}</td>
           <td></td>
           <td style="color:var(--green)">${formatBRL(totPago)}</td>
-          <td colspan="${canEdit ? 3 : 2}"></td>
+          <td colspan="2"></td>
         </tr>
       </tfoot>
     </table>
@@ -1898,19 +1898,21 @@ function abrirDetalheSolic(rowIndex) {
     <div class="detail-grid">
       <div class="detail-item"><div class="detail-label">Favorecido</div><div class="detail-value">${r.FAVORECIDO||'—'}</div></div>
       <div class="detail-item"><div class="detail-label">Parcela</div><div class="detail-value">${r.PARCELAS||'à vista'}</div></div>
+      <div class="detail-item"><div class="detail-label">Vencimento Agendado</div><div class="detail-value" style="color:var(--accent)">${r['DATA PAGAMENTO']||'—'}</div></div>
+      <div class="detail-item"><div class="detail-label">Valor da Parcela</div><div class="detail-value">${formatBRL(parseBRL(r['VALOR PAGO (R$)']||0))}</div></div>
       ${r.PIX ? `<div class="detail-item" style="grid-column:1/-1"><div class="detail-label">PIX</div><div class="detail-value mono">${r.PIX}</div></div>` : ''}
-      ${r.BANCO ? `<div class="detail-item"><div class="detail-label">Banco</div><div class="detail-value">${r.BANCO} · Ag ${r['AGÊNCIA']||''} · Cc ${r.CONTA||''}</div></div>` : ''}
+      ${r.BANCO ? `<div class="detail-item" style="grid-column:1/-1"><div class="detail-label">Banco</div><div class="detail-value">${r.BANCO} · Ag ${r['AGÊNCIA']||''} · Cc ${r.CONTA||''}</div></div>` : ''}
       <div class="detail-item"><div class="detail-label">Custo 2026 (ref)</div><div class="detail-value">${formatBRL(parseBRL(r['CUSTO 2026 (R$)']||0))}</div></div>
     </div>
     ${st === 'Pago' || st === 'Pago parcial' ? `
-      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.1em;margin:14px 0 8px">Pagamento</div>
+      <div style="font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:0.1em;margin:14px 0 8px">Pagamento Realizado</div>
       <div class="detail-grid">
         <div class="detail-item"><div class="detail-label">Pago por</div><div class="detail-value">${r['PAGO POR']||'—'}</div></div>
-        <div class="detail-item"><div class="detail-label">Data Pagamento</div><div class="detail-value">${r['DATA PAGAMENTO']||'—'}</div></div>
-        <div class="detail-item"><div class="detail-label">Valor Pago</div><div class="detail-value" style="color:var(--green);font-weight:700">${formatBRL(valorPago)}</div></div>
+        <div class="detail-item"><div class="detail-label">Data de Pagamento</div><div class="detail-value" style="color:var(--green)">${r['DATA PAGAMENTO']||'—'}</div></div>
+        <div class="detail-item"><div class="detail-label">Valor Pago (acumulado)</div><div class="detail-value" style="color:var(--green);font-weight:700">${formatBRL(valorPago)}</div></div>
         ${r['OBS / COMPROVANTE'] ? `<div class="detail-item"><div class="detail-label">Comprovante</div><div class="detail-value"><a href="${r['OBS / COMPROVANTE']}" target="_blank" style="color:var(--blue)">Ver comprovante ↗</a></div></div>` : ''}
       </div>` : ''}
-    ${r['OBS / COMPROVANTE'] && st !== 'Pago' && st !== 'Pago parcial' ? `
+    ${r['OBS / COMPROVANTE'] && st !== 'Pago' && st !== 'Pago parcial' && st !== 'Rejeitado' ? `
       <div class="detail-item" style="margin-top:10px"><div class="detail-label">Observações</div><div class="detail-value">${r['OBS / COMPROVANTE']}</div></div>` : ''}
     ${st === 'Rejeitado' && r['OBS / COMPROVANTE'] ? `
       <div class="detail-item" style="margin-top:10px;border:1px solid rgba(229,83,83,0.3)"><div class="detail-label" style="color:var(--red)">Motivo da Rejeição</div><div class="detail-value">${r['OBS / COMPROVANTE']}</div></div>` : ''}
@@ -1962,11 +1964,32 @@ function renderSolicStep1() {
   const p = USUARIO.perfil;
   const cids = cidadesVisiveis();
   const f = _solicForm;
-
-  // Categorias e itens orçados da produção (cidade selecionada)
   const cidSel = p === 'prod' ? CIDADE_ATIVA : (f.cidade || cids[0]?.cidade || '');
+
+  // Se prodData vazio, carrega em background e re-renderiza o step
+  if (prodData.length === 0 && cidSel) {
+    const sheetId = cidadeSheet(cidSel);
+    if (sheetId) {
+      sheetsRead(sheetId, 'Produção!A:N', true).then(rows => {
+        if (!rows || rows.length < 2) return;
+        const header = rows[0];
+        prodData = rows.slice(1).map((row, i) => {
+          const obj = rowToObj(header, row);
+          obj._rowIndex = i + 2;
+          return obj;
+        }).filter(r => r.CATEGORIA && r.CATEGORIA !== 'CATEGORIA' && r['STATUS'] && r['STATUS'].trim() !== '');
+        _prodCidade = cidSel;
+        const stepBody = document.getElementById('solic-step-body');
+        if (stepBody && _solicEtapa === 1) stepBody.innerHTML = renderSolicStep1();
+      }).catch(() => {});
+    }
+  }
+
   const itensOrcados = prodData.filter(r => r['STATUS'] === 'Orçado');
   const cats = [...new Set(itensOrcados.map(r => r.CATEGORIA).filter(Boolean))];
+  const catAtual = f.categoria || '';
+  const isCustomCat = catAtual && !cats.includes(catAtual);
+  const isCustomItem = f.item && !itensOrcados.some(r => r.ITEM === f.item);
 
   return `
     <div class="step-pane active">
@@ -1980,31 +2003,41 @@ function renderSolicStep1() {
               </select>`}
         </div>
       </div>
-      <div class="form-row col2">
-        <div class="form-group">
-          <label>Categoria *</label>
-          <select class="form-control" id="sf-cat" onchange="onSolicCatChange(this.value)">
-            <option value="">Selecione a categoria</option>
-            ${cats.map(c => `<option value="${c}" ${f.categoria===c?'selected':''}>${c}</option>`).join('')}
-            <option value="__outro__" ${!cats.includes(f.categoria) && f.categoria ? 'selected' : ''}>Outra (digitar)</option>
-          </select>
-          <input class="form-control" id="sf-cat-custom" style="margin-top:6px;display:${(!cats.includes(f.categoria||'') && f.categoria) ? 'block' : 'none'}"
-            value="${(!cats.includes(f.categoria||'') && f.categoria) ? f.categoria : ''}" placeholder="Digite a categoria">
-        </div>
-        <div class="form-group">
-          <label>Item * <span style="font-size:10px;color:var(--accent);font-weight:400">(apenas itens com status Orçado)</span></label>
-          <select class="form-control" id="sf-item-sel" onchange="onSolicItemChange(this.value)">
-            <option value="">Selecione o item</option>
-            ${itensOrcados
-              .filter(r => !f.categoria || r.CATEGORIA === f.categoria)
-              .map(r => `<option value="${(r.ITEM||'').replace(/"/g,'&quot;')}" data-cat="${r.CATEGORIA||''}" data-total="${parseBRL(r['TOTAL 2026 (R$)']||0)}"
-                ${f.item===r.ITEM?'selected':''}>${r.ITEM}</option>`).join('')}
-            <option value="__outro__" ${!itensOrcados.some(r => r.ITEM===f.item) && f.item ? 'selected' : ''}>Outro (digitar)</option>
-          </select>
-          <input class="form-control" id="sf-item-custom" style="margin-top:6px;display:${(!itensOrcados.some(r=>r.ITEM===f.item) && f.item) ? 'block' : 'none'}"
-            value="${(!itensOrcados.some(r=>r.ITEM===f.item) && f.item) ? f.item : ''}" placeholder="Digite o nome do item">
-        </div>
-      </div>
+      ${prodData.length === 0
+        ? `<div style="padding:20px;text-align:center;color:var(--text3);font-size:13px">
+            <div class="spinner" style="margin:0 auto 10px"></div>
+            Carregando itens da produção...
+           </div>`
+        : `<div class="form-row col2">
+            <div class="form-group">
+              <label>Categoria *</label>
+              <select class="form-control" id="sf-cat" onchange="onSolicCatChange(this.value)">
+                <option value="">Selecione a categoria</option>
+                ${cats.map(c => `<option value="${c}" ${catAtual===c?'selected':''}>${c}</option>`).join('')}
+                <option value="__outro__" ${isCustomCat?'selected':''}>Outra (digitar)</option>
+              </select>
+              <input class="form-control" id="sf-cat-custom"
+                style="margin-top:6px;display:${isCustomCat?'block':'none'}"
+                value="${isCustomCat ? catAtual : ''}" placeholder="Digite a categoria">
+            </div>
+            <div class="form-group">
+              <label>Item * <span style="font-size:10px;color:var(--accent);font-weight:400">(apenas itens Orçados)</span></label>
+              <select class="form-control" id="sf-item-sel" onchange="onSolicItemChange(this.value)">
+                <option value="">Selecione o item</option>
+                ${itensOrcados
+                  .filter(r => !catAtual || isCustomCat || r.CATEGORIA === catAtual)
+                  .map(r => `<option value="${(r.ITEM||'').replace(/"/g,'&quot;')}"
+                    data-cat="${r.CATEGORIA||''}"
+                    data-total="${parseBRL(r['TOTAL 2026 (R$)']||0)}"
+                    data-forn="${(r.FORNECEDOR||'').replace(/"/g,'&quot;')}"
+                    ${f.item===r.ITEM?'selected':''}>${r.ITEM}</option>`).join('')}
+                <option value="__outro__" ${isCustomItem?'selected':''}>Outro (digitar)</option>
+              </select>
+              <input class="form-control" id="sf-item-custom"
+                style="margin-top:6px;display:${isCustomItem?'block':'none'}"
+                value="${isCustomItem ? f.item : ''}" placeholder="Digite o nome do item">
+            </div>
+          </div>`}
       <div class="form-row">
         <div class="form-group">
           <label>Descrição / Justificativa *</label>
@@ -2299,6 +2332,7 @@ async function enviarSolicitacao() {
       // Monta linhas (uma por parcela)
       const linhas = _solicParcelas.map((p, i) => {
         const parcelaLabel = _solicParcelado ? `${n}x Parcela ${i+1}/${n}` : 'à vista';
+        const vencFormatado = formatDateBR(p.venc) || '';
         return [
           dataHoje(),            // A DATA
           nomeCidade,            // B CIDADE
@@ -2317,7 +2351,9 @@ async function enviarSolicitacao() {
           parcelaLabel,          // O PARCELAS
           'Em aberto',           // P STATUS
           '', '',                // Q APROVADO POR / R DATA APROVAÇÃO
-          '', '', '',            // S PAGO POR / T DATA PAGAMENTO / U VALOR PAGO
+          '',                    // S PAGO POR
+          vencFormatado,         // T DATA VENCIMENTO (agendada pelo solicitante)
+          parseFloat(p.valor)||0,// U VALOR PARCELA
           f.obs || '',           // V OBS
         ];
       });
@@ -2378,7 +2414,7 @@ async function carregarAprovacoes() {
 
     content.innerHTML = `
       ${renderAprovSection('Pendentes de Aprovação', '🟡', pendentes, 'pendente')}
-      ${renderAprovSection('Aguardando MeuBilhete', '🔵', aprovadas, 'meubilhete')}
+      ${renderAprovSection('Pendente envio para MeuBilhete', '🔵', aprovadas, 'meubilhete')}
       ${renderAprovSection('Confirmar Pagamento', '💚', aguardando, 'confirmar')}
     `;
   } catch (e) {
@@ -2400,7 +2436,7 @@ function renderAprovSection(titulo, emoji, dados, tipo) {
           : `<div class="table-wrap"><table>
               <thead><tr>
                 <th>Data Solic.</th><th>Cidade</th><th>Item</th><th>Valor</th>
-                <th>Parcela</th><th>Favorecido</th><th>Data Pgto</th><th>Ações</th>
+                <th>Parcela</th><th>Favorecido</th><th>Vencimento</th><th>Ações</th>
               </tr></thead>
               <tbody>
                 ${dados.map(r => `
@@ -2580,7 +2616,7 @@ async function confirmarPagamento(rowIndex, cidade, item, valorSol, valorPagoAnt
       const totalPago = valorPagoAnt + valorNovo;
       const novoStatus = totalPago >= valorSol ? 'Pago' : 'Pago parcial';
 
-      // Atualiza colunas P, S, T, U, V
+      // Atualiza: P=STATUS, S=PAGO POR, T=DATA PAGAMENTO REAL (sobrescreve vencimento), U=VALOR PAGO TOTAL, V=COMPROVANTE
       await sheetsWrite(SHEET_GERAL, `Solicitações!P${rowIndex}`, [[novoStatus]]);
       await sheetsWrite(SHEET_GERAL, `Solicitações!S${rowIndex}:V${rowIndex}`, [[
         USUARIO.nome, dataPg, totalPago, comp
