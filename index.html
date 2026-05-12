@@ -1827,7 +1827,7 @@ async function carregarSolicitacoes() {
   const content = document.getElementById('solic-content');
   content.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>Carregando solicitações...</span></div>`;
   try {
-    const rows = await sheetsRead(SHEET_GERAL, 'Solicitações!A:V');
+    const rows = await sheetsRead(SHEET_GERAL, 'Solicitações!A:W');
     if (!rows || rows.length < 2) { solicData = []; } else {
       const h = rows[0];
       solicData = rows.slice(1).map((r, i) => {
@@ -1916,7 +1916,11 @@ function abrirDetalheSolic(rowIndex) {
   if (!r) return;
   const st = r.STATUS || '—';
   const valorSol = parseBRL(r['VALOR SOLICITADO (R$)'] || 0);
+  // Após migração: W = VALOR PAGO. Antes da migração os dados antigos têm o valor pago em U.
+  // O fallback para r['VALOR PAGO (R$)'] funciona em ambos os casos: após adicionar a coluna W,
+  // ela passa a ser o "VALOR PAGO (R$)" (cabeçalho antigo de U virou VALOR PARCELA).
   const valorPago = parseBRL(r['VALOR PAGO (R$)'] || 0);
+  const valorParcelaLinha = parseBRL(r['VALOR PARCELA (R$)'] || r['VALOR PARCELA'] || 0);
   const html = `
     <div style="margin-bottom:14px;display:flex;align-items:center;gap:10px">
       <span class="badge ${badgeSolicStatus(st)}" style="font-size:12px;padding:4px 14px">${st}</span>
@@ -1936,7 +1940,7 @@ function abrirDetalheSolic(rowIndex) {
       <div class="detail-item"><div class="detail-label">Favorecido</div><div class="detail-value">${r.FAVORECIDO||'—'}</div></div>
       <div class="detail-item"><div class="detail-label">Parcela</div><div class="detail-value">${r.PARCELAS||'à vista'}</div></div>
       <div class="detail-item"><div class="detail-label">Vencimento Agendado</div><div class="detail-value" style="color:var(--accent)">${r['DATA PAGAMENTO']||'—'}</div></div>
-      <div class="detail-item"><div class="detail-label">Valor da Parcela</div><div class="detail-value">${formatBRL(parseBRL(r['VALOR PAGO (R$)']||0))}</div></div>
+      <div class="detail-item"><div class="detail-label">Valor da Parcela</div><div class="detail-value">${formatBRL(valorParcelaLinha)}</div></div>
       ${r.PIX ? `<div class="detail-item" style="grid-column:1/-1"><div class="detail-label">PIX</div><div class="detail-value mono">${r.PIX}</div></div>` : ''}
       ${r.BANCO ? `<div class="detail-item" style="grid-column:1/-1"><div class="detail-label">Banco</div><div class="detail-value">${r.BANCO} · Ag ${r['AGÊNCIA']||''} · Cc ${r.CONTA||''}</div></div>` : ''}
       <div class="detail-item"><div class="detail-label">Custo 2026 (ref)</div><div class="detail-value">${formatBRL(parseBRL(r['CUSTO 2026 (R$)']||0))}</div></div>
@@ -2643,13 +2647,14 @@ async function enviarSolicitacao() {
           '', '',                // Q APROVADO POR / R DATA APROVAÇÃO
           '',                    // S PAGO POR
           vencFormatado,         // T DATA VENCIMENTO (agendada pelo solicitante)
-          parseFloat(p.valor)||0,// U VALOR PARCELA
-          f.obs || '',           // V OBS
+          parseFloat(p.valor)||0,// U VALOR PARCELA (imutável após criação)
+          f.obs || '',           // V OBS / COMPROVANTE
+          0,                     // W VALOR PAGO (R$) — começa em 0; só muda no confirmarPagamento
         ];
       });
 
-      await sheetsAppend(SHEET_GERAL, 'Solicitações!A:V', linhas);
-      cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:V`);
+      await sheetsAppend(SHEET_GERAL, 'Solicitações!A:W', linhas);
+      cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:W`);
 
       // Bug #5: propaga status para a Produção da PPP da cidade
       // (item passa de "Orçado" → "Pagamento solicitado")
@@ -2692,7 +2697,7 @@ async function carregarAprovacoes() {
   const content = document.getElementById('aprov-content');
   content.innerHTML = `<div class="loading-state"><div class="spinner"></div><span>Carregando aprovações...</span></div>`;
   try {
-    const rows = await sheetsRead(SHEET_GERAL, 'Solicitações!A:V', false);
+    const rows = await sheetsRead(SHEET_GERAL, 'Solicitações!A:W', false);
     if (!rows || rows.length < 2) {
       content.innerHTML = `<div class="empty-state"><div class="icon">📭</div><p>Nenhuma solicitação encontrada.</p></div>`;
       return;
@@ -2817,7 +2822,7 @@ async function aprovarSolicitacao(rowIndex, cidade, item) {
     await sheetsWrite(SHEET_GERAL, range, [[
       'Pagamento aprovado', USUARIO.nome, textoData(dataHoje())
     ]]);
-    cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:V`);
+    cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:W`);
 
     // Bug #5: propaga "Pagamento aprovado" para a Produção da PPP da cidade
     try {
@@ -2873,7 +2878,7 @@ async function confirmarRejeicao(rowIndex, cidade, item) {
       // Atualiza P=STATUS, V=OBS
       await sheetsWrite(SHEET_GERAL, `Solicitações!P${rowIndex}`, [['Rejeitado']]);
       await sheetsWrite(SHEET_GERAL, `Solicitações!V${rowIndex}`, [[motivo]]);
-      cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:V`);
+      cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:W`);
 
       // Bug #5: reverte status na Produção para "Orçado"
       // (só reverte se o item de fato estava em estado de pagamento — não derruba pagamentos já confirmados)
@@ -2908,7 +2913,7 @@ async function confirmarRejeicao(rowIndex, cidade, item) {
 async function enviarMeuBilhete(rowIndex) {
   try {
     await sheetsWrite(SHEET_GERAL, `Solicitações!P${rowIndex}`, [['Solicitado a MeuBilhete']]);
-    cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:V`);
+    cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:W`);
     showToast('Status atualizado → Solicitado a MeuBilhete', 'success');
     await carregarAprovacoes();
   } catch (e) {
@@ -2979,12 +2984,23 @@ async function confirmarPagamento(rowIndex, cidade, item, valorParcela, valorPag
       const totalPagoLinha = valorPagoAnt + valorNovo;
       const novoStatus = totalPagoLinha >= valorParcela - 0.005 ? 'Pago' : 'Pago parcial';
 
-      // Atualiza: P=STATUS, S=PAGO POR, T=DATA PAGAMENTO REAL (sobrescreve vencimento), U=VALOR PAGO TOTAL (DESTA parcela), V=COMPROVANTE
+      // Atualiza:
+      //   P = STATUS desta linha
+      //   S = PAGO POR
+      //   T = DATA PAGAMENTO REAL
+      //   V = OBS / COMPROVANTE (preservado se já tinha algo)
+      //   W = VALOR PAGO acumulado DESTA linha
+      // U (VALOR PARCELA) NUNCA é sobrescrito — é imutável após a criação.
       await sheetsWrite(SHEET_GERAL, `Solicitações!P${rowIndex}`, [[novoStatus]]);
-      await sheetsWrite(SHEET_GERAL, `Solicitações!S${rowIndex}:V${rowIndex}`, [[
-        USUARIO.nome, textoData(dataPg), totalPagoLinha, comp
+      await sheetsWrite(SHEET_GERAL, `Solicitações!S${rowIndex}:T${rowIndex}`, [[
+        USUARIO.nome, textoData(dataPg)
       ]]);
-      cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:V`);
+      // Grava comprovante somente se o usuário forneceu (não apagar o que já existe)
+      if (comp) {
+        await sheetsWrite(SHEET_GERAL, `Solicitações!V${rowIndex}`, [[comp]]);
+      }
+      await sheetsWrite(SHEET_GERAL, `Solicitações!W${rowIndex}`, [[totalPagoLinha]]);
+      cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:W`);
 
       // Atualiza PPP da cidade (colunas J=valor pago, K=status, L=fornecedor se em branco)
       // Bug #5 + bug pagamento parcelado: o valor pago na Produção e o status do ITEM são GLOBAIS
@@ -2994,7 +3010,7 @@ async function confirmarPagamento(rowIndex, cidade, item, valorParcela, valorPag
         const cat = solic?.CATEGORIA || '';
         const valorTotalSolic = parseBRL(solic?.['VALOR SOLICITADO (R$)'] || 0);
 
-        // Soma o valor pago de TODAS as linhas (parcelas) com o mesmo item + cidade.
+        // Soma o VALOR PAGO de TODAS as linhas (parcelas) com o mesmo item + cidade.
         // Para a linha atual (rowIndex), usa o valor que ACABAMOS de calcular (totalPagoLinha),
         // pois solicData ainda tem o estado anterior (antes deste pagamento).
         let totalPagoItem = 0;
@@ -3008,7 +3024,7 @@ async function confirmarPagamento(rowIndex, cidade, item, valorParcela, valorPag
             // Linha que acabou de ser paga — usa o valor recém-calculado
             totalPagoItem += totalPagoLinha;
           } else {
-            // Outras parcelas — usa o que está gravado
+            // Outras parcelas — usa o VALOR PAGO já gravado (coluna W)
             totalPagoItem += parseBRL(s['VALOR PAGO (R$)'] || 0);
           }
         }
