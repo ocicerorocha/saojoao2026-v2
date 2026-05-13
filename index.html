@@ -326,19 +326,8 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 @media (max-width: 768px) {
   #sidebar { transform: translateX(-100%); transition: transform 0.2s ease; }
   #sidebar.open { transform: none; }
-  #mainContent { left: 0; padding: 16px; }
-  .topbar-brand { width: auto; padding: 0 12px; }
-  .topbar-user-info { display: none; }
-  #btn-hamburger { display: flex !important; }
-  .sidebar-overlay { display: block !important; }
-  .cards-grid { grid-template-columns: 1fr 1fr !important; }
-  .form-row.col2, .form-row.col3 { grid-template-columns: 1fr !important; }
-  .filter-bar { gap: 8px; }
-  .search-input { min-width: 140px; }
-  .table-wrap { font-size: 12px; }
-  .table-wrap th, .table-wrap td { padding: 8px 6px; }
-  .step-labels { display: none; }
-  .page-header h1 { font-size: 18px; }
+  #mainContent { left: 0; }
+  .topbar-brand { width: auto; }
 }
 
 /* ── PROD FILTERS ── */
@@ -488,11 +477,6 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
       <div class="logo-sub">São João 2026</div>
     </div>
   </div>
-  <button id="btn-hamburger" onclick="toggleSidebar()"
-    style="display:none;align-items:center;justify-content:center;
-           width:36px;height:36px;background:transparent;border:1px solid var(--border);
-           border-radius:var(--radius-sm);cursor:pointer;color:var(--text);font-size:18px;
-           margin-left:8px;flex-shrink:0">☰</button>
   <div class="topbar-center">
     <span id="topbarCityBadge" class="topbar-city-badge" style="display:none"></span>
     <select id="topbarCitySelect" style="display:none" onchange="onCityChange(this.value)">
@@ -516,8 +500,6 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
 <div id="sidebar" style="display:none">
   <div id="sidebarNav"></div>
 </div>
-<div class="sidebar-overlay" onclick="toggleSidebar()"
-  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:89"></div>
 
 <!-- ════════════════════════════════════════════
      MAIN CONTENT
@@ -1010,13 +992,6 @@ function cidadesVisiveis() {
   return CIDADES;
 }
 
-function toggleSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  const overlay = document.querySelector('.sidebar-overlay');
-  const isOpen = sidebar.classList.toggle('open');
-  if (overlay) overlay.style.display = isOpen ? 'block' : 'none';
-}
-
 /* ══════════════════════════════════════════════════════════════
    BLOCO 8 — TOPBAR CIDADE
 ══════════════════════════════════════════════════════════════ */
@@ -1130,14 +1105,6 @@ function showTab(tabId) {
   if (pane) pane.classList.add('active');
   const navItem = document.getElementById(`nav-${tabId}`);
   if (navItem) navItem.classList.add('active');
-
-  // Fecha sidebar no mobile ao navegar
-  const sidebar = document.getElementById('sidebar');
-  const overlay = document.querySelector('.sidebar-overlay');
-  if (sidebar.classList.contains('open')) {
-    sidebar.classList.remove('open');
-    if (overlay) overlay.style.display = 'none';
-  }
 
   onTabChange(tabId);
 }
@@ -1255,28 +1222,6 @@ async function renderDashboard() {
     // Carrega produção e receitas em paralelo
     const receitasPromise = carregarReceitas();
 
-    // Carrega solicitações para os cards financeiros
-    const solicPromise = sheetsRead(SHEET_GERAL, 'Solicitações!A:W').then(rows => {
-      if (!rows || rows.length < 2) return { totalSolicitado: 0, totalPago: 0, totalPendente: 0 };
-      const header = rows[0];
-      let escopo = rows.slice(1)
-        .map(r => rowToObj(header, r))
-        .filter(r => r.STATUS && r.STATUS !== 'Rejeitado');
-      // Filtrar por cidade ativa
-      if (CIDADE_ATIVA && CIDADE_ATIVA !== 'todas') {
-        escopo = escopo.filter(r => normCid(r.CIDADE) === normCid(CIDADE_ATIVA));
-      }
-      const totalSolicitado = escopo
-        .filter(r => r.STATUS !== 'Pago')
-        .reduce((s, r) => s + parseBRL(r['VALOR PARCELA (R$)'] || r['VALOR SOLICITADO (R$)'] || 0), 0);
-      const totalPagoSolic = escopo
-        .reduce((s, r) => s + parseBRL(r['VALOR PAGO (R$)'] || 0), 0);
-      const totalPendenteSolic = escopo
-        .filter(r => !['Pago'].includes(r.STATUS))
-        .reduce((s, r) => s + parseBRL(r['VALOR PARCELA (R$)'] || r['VALOR SOLICITADO (R$)'] || 0), 0) - totalPagoSolic;
-      return { totalSolicitado, totalPago: totalPagoSolic, totalPendente: Math.max(0, totalPendenteSolic) };
-    }).catch(() => ({ totalSolicitado: 0, totalPago: 0, totalPendente: 0 }));
-
     if (CIDADE_ATIVA === 'todas') {
       const resultados = await Promise.all(
         CIDADES.map(c => c.idSheet ? carregarProducao(c.idSheet).catch(() => null) : Promise.resolve(null))
@@ -1311,7 +1256,6 @@ async function renderDashboard() {
 
     // Receita prevista (filtra por cidade ou soma todas)
     const receitas = await receitasPromise;
-    const solicMetrics = await solicPromise;
     let totalReceita = 0;
     if (CIDADE_ATIVA === 'todas') {
       totalReceita = receitas.total;
@@ -1365,33 +1309,6 @@ async function renderDashboard() {
           <div class="metric-label" style="color:var(--text3)">Referência 2025</div>
           <div class="metric-value sm" style="color:var(--text3);font-size:18px">${formatBRL(totalCusto25)}</div>
           <div class="metric-sub">custo do ano anterior</div>
-        </div>
-      </div>
-
-      <!-- Cards de Solicitações -->
-      <div style="margin:0 0 8px;padding-top:4px">
-        <span style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.1em">Solicitações de Pagamento</span>
-      </div>
-      <div class="cards-grid" style="margin-bottom:24px">
-        <div class="metric-card green">
-          <div class="metric-icon">💰</div>
-          <div class="metric-label">Total Pago</div>
-          <div class="metric-value sm">${formatBRL(solicMetrics.totalPago)}</div>
-          <div class="metric-sub">pagamentos confirmados</div>
-        </div>
-        <div class="metric-card red">
-          <div class="metric-icon">📤</div>
-          <div class="metric-label">A Pagar</div>
-          <div class="metric-value sm">${formatBRL(solicMetrics.totalPendente)}</div>
-          <div class="metric-sub">solicitações em aberto</div>
-        </div>
-        <div class="metric-card ${(totalReceita - solicMetrics.totalPago) >= 0 ? 'blue' : 'red'}">
-          <div class="metric-icon">${(totalReceita - solicMetrics.totalPago) >= 0 ? '📊' : '⚠️'}</div>
-          <div class="metric-label">Resultado Real</div>
-          <div class="metric-value sm" style="color:${(totalReceita - solicMetrics.totalPago) >= 0 ? 'var(--blue)' : 'var(--red)'}">
-            ${formatBRL(totalReceita - solicMetrics.totalPago)}
-          </div>
-          <div class="metric-sub">receita recebida − pago</div>
         </div>
       </div>
 
@@ -1919,13 +1836,13 @@ async function carregarSolicitacoes() {
         return obj;
       }).filter(r => r.DATA || r.ITEM);
     }
-    renderSolicTabela(content);
+    await renderSolicTabela(content);
   } catch (e) {
     content.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><p style="color:var(--red)">${e.message}</p></div>`;
   }
 }
 
-function renderSolicTabela(content) {
+async function renderSolicTabela(content) {
   const p = USUARIO.perfil;
 
   // Filtra por perfil
@@ -1939,22 +1856,82 @@ function renderSolicTabela(content) {
   // Filtros ativos (apenas status — filtro de cidade foi removido em Bug #2)
   if (solicFiltroSt) dados = dados.filter(r => r.STATUS === solicFiltroSt);
 
-  // Ordenar por data de vencimento (col T = DATA PAGAMENTO) — mais próximas primeiro
-  // Status Pago/Rejeitado vão para o fim
-  const statusOrdem = { 'Em aberto': 0, 'Pagamento aprovado': 1, 'Solicitado a MeuBilhete': 2, 'Pago parcial': 3, 'Pago': 4, 'Rejeitado': 5 };
+  // Ordenar: status prioritários primeiro, depois por vencimento crescente
+  const statusOrdem = {'Em aberto':0,'Pagamento aprovado':1,'Solicitado a MeuBilhete':2,'Pago parcial':3,'Pago':4,'Rejeitado':5};
   dados = [...dados].sort((a, b) => {
-    const stA = statusOrdem[a.STATUS] ?? 9;
-    const stB = statusOrdem[b.STATUS] ?? 9;
-    if (stA !== stB) return stA - stB;
-    // Dentro do mesmo status, ordena por vencimento crescente
-    const dA = a['DATA PAGAMENTO'] ? isoToInput(normalizarData(a['DATA PAGAMENTO'])) : '9999';
-    const dB = b['DATA PAGAMENTO'] ? isoToInput(normalizarData(b['DATA PAGAMENTO'])) : '9999';
-    return dA.localeCompare(dB);
+    const sa = statusOrdem[a.STATUS] ?? 9;
+    const sb = statusOrdem[b.STATUS] ?? 9;
+    if (sa !== sb) return sa - sb;
+    const da = a['DATA PAGAMENTO'] ? isoToInput(normalizarData(a['DATA PAGAMENTO'])) : '9999-99-99';
+    const db = b['DATA PAGAMENTO'] ? isoToInput(normalizarData(b['DATA PAGAMENTO'])) : '9999-99-99';
+    return da.localeCompare(db);
   });
+
+  // Calcular métricas para os cards (respeitam filtro de status se ativo)
+  const todosSolic = solicFiltroSt ? solicData : dados; // cards sempre sobre escopo de cidade, sem filtro de status
+  const scopeCards = (() => {
+    let d = solicData;
+    if (p === 'prod') d = d.filter(r => normCid(r.CIDADE) === normCid(CIDADE_ATIVA));
+    else if (CIDADE_ATIVA && CIDADE_ATIVA !== 'todas') d = d.filter(r => normCid(r.CIDADE) === normCid(CIDADE_ATIVA));
+    return d;
+  })();
+
+  const cardPago = scopeCards.reduce((s, r) => s + parseBRL(r['VALOR PAGO (R$)'] || 0), 0);
+  const cardAPagar = scopeCards
+    .filter(r => ['Em aberto','Pagamento aprovado','Solicitado a MeuBilhete'].includes(r.STATUS))
+    .reduce((s, r) => s + parseBRL(r['VALOR PARCELA (R$)'] || r['VALOR SOLICITADO (R$)'] || 0), 0);
+
+  // Receita recebida (lê da aba Receitas — usa cache)
+  let cardReceita = 0;
+  try {
+    const recRows = await sheetsRead(SHEET_GERAL, 'Receitas!A:H');
+    if (recRows && recRows.length > 1) {
+      const rh = recRows[0];
+      recRows.slice(1).forEach(row => {
+        const obj = rowToObj(rh, row);
+        if (!['Recebido','Recebido parcial'].includes(obj.STATUS)) return;
+        if (CIDADE_ATIVA && CIDADE_ATIVA !== 'todas' && normCid(obj.CIDADE) !== normCid(CIDADE_ATIVA)) return;
+        cardReceita += parseBRL(obj['VALOR (R$)'] || 0);
+      });
+    }
+  } catch(e) {}
+
+  const cardResultado = cardReceita - cardPago;
+  const resultadoPositivo = cardResultado >= 0;
 
   const statusList = ['Em aberto','Pagamento aprovado','Solicitado a MeuBilhete','Pago parcial','Pago','Rejeitado'];
 
   content.innerHTML = `
+    <!-- Cards de resumo financeiro -->
+    <div class="cards-grid" style="margin-bottom:20px">
+      <div class="metric-card green">
+        <div class="metric-icon">💰</div>
+        <div class="metric-label">Total Pago</div>
+        <div class="metric-value sm">${formatBRL(cardPago)}</div>
+        <div class="metric-sub">pagamentos confirmados</div>
+      </div>
+      <div class="metric-card red">
+        <div class="metric-icon">📤</div>
+        <div class="metric-label">A Pagar</div>
+        <div class="metric-value sm">${formatBRL(cardAPagar)}</div>
+        <div class="metric-sub">solicitações em aberto</div>
+      </div>
+      <div class="metric-card blue">
+        <div class="metric-icon">💵</div>
+        <div class="metric-label">Receita Recebida</div>
+        <div class="metric-value sm">${formatBRL(cardReceita)}</div>
+        <div class="metric-sub">confirmado + recebido parcial</div>
+      </div>
+      <div class="metric-card ${resultadoPositivo ? 'green' : 'red'}">
+        <div class="metric-icon">${resultadoPositivo ? '📈' : '📉'}</div>
+        <div class="metric-label">Resultado Real</div>
+        <div class="metric-value sm" style="color:${resultadoPositivo ? 'var(--green)' : 'var(--red)'}">
+          ${formatBRL(cardResultado)}
+        </div>
+        <div class="metric-sub">receita recebida − total pago</div>
+      </div>
+    </div>
+
     <div class="section-block">
       <div class="section-block-header" style="flex-wrap:wrap;gap:10px">
         <h3>Histórico de Solicitações <span class="badge badge-gray">${dados.length}</span></h3>
@@ -1973,32 +1950,36 @@ function renderSolicTabela(content) {
               <th>Valor</th><th>Parcela</th><th>Vencimento</th><th>Status</th>
             </tr></thead>
             <tbody>
-              ${dados.map((r,i) => {
+              ${dados.map(r => {
                 const venc = r['DATA PAGAMENTO'] ? normalizarData(r['DATA PAGAMENTO']) : '—';
-                const vencAtrasado = venc !== '—' && !['Pago','Rejeitado'].includes(r.STATUS) && isoToInput(normalizarData(venc)) < dataHoje().split('/').reverse().join('-');
+                const hoje = dataHoje();
+                const atrasado = venc !== '—'
+                  && !['Pago','Rejeitado'].includes(r.STATUS)
+                  && isoToInput(venc) < isoToInput(hoje);
                 return `
-                <tr class="clickable" onclick="abrirDetalheSolic(${r._rowIndex})" title="Clique para ver detalhes">
-                  <td>${r.DATA||'—'}</td>
+                <tr class="clickable" onclick="abrirDetalheSolic(${r._rowIndex})" title="Ver detalhes">
+                  <td>${normalizarData(r.DATA||'')}</td>
                   <td>${r.CIDADE||'—'}</td>
                   <td>${r.SOLICITANTE||'—'}</td>
                   <td class="text-main">${r.ITEM||'—'}</td>
                   <td>${formatBRL(parseBRL(r['VALOR SOLICITADO (R$)']||0))}</td>
                   <td>${r.PARCELAS||'à vista'}</td>
-                  <td style="color:${vencAtrasado?'var(--red)':'inherit'};font-weight:${vencAtrasado?'600':'400'}">${venc}${vencAtrasado?' ⚠':''}}</td>
+                  <td style="color:${atrasado?'var(--red)':'inherit'};font-weight:${atrasado?'600':'400'}">${venc}${atrasado?' ⚠':''}</td>
                   <td><span class="badge ${badgeSolicStatus(r.STATUS)}">${r.STATUS||'—'}</span></td>
-                </tr>`;}).join('')}
+                </tr>`;
+              }).join('')}
             </tbody>
           </table></div>`
       }
     </div>
-    <p style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center">💡 Clique em qualquer linha para ver detalhes completos da solicitação</p>
+    <p style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center">💡 Clique em qualquer linha para ver detalhes completos</p>
   `;
 }
 
 function setSolicFiltro(tipo, val) {
   if (tipo === 'st') solicFiltroSt = val;
   // Bug #2: filtro de cidade ('cid') removido — usa CIDADE_ATIVA do topbar
-  renderSolicTabela(document.getElementById('solic-content'));
+  renderSolicTabela(document.getElementById('solic-content')).catch(e => console.error(e));
 }
 
 function badgeSolicStatus(st) {
