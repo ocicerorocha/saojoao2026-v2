@@ -326,8 +326,19 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 @media (max-width: 768px) {
   #sidebar { transform: translateX(-100%); transition: transform 0.2s ease; }
   #sidebar.open { transform: none; }
-  #mainContent { left: 0; }
-  .topbar-brand { width: auto; }
+  #mainContent { left: 0; padding: 16px; }
+  .topbar-brand { width: auto; padding: 0 12px; }
+  .topbar-user-info { display: none; }
+  #btn-hamburger { display: flex !important; }
+  .sidebar-overlay { display: block !important; }
+  .cards-grid { grid-template-columns: 1fr 1fr !important; }
+  .form-row.col2, .form-row.col3 { grid-template-columns: 1fr !important; }
+  .filter-bar { gap: 8px; }
+  .search-input { min-width: 140px; }
+  .table-wrap { font-size: 12px; }
+  .table-wrap th, .table-wrap td { padding: 8px 6px; }
+  .step-labels { display: none; }
+  .page-header h1 { font-size: 18px; }
 }
 
 /* ── PROD FILTERS ── */
@@ -477,6 +488,11 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
       <div class="logo-sub">São João 2026</div>
     </div>
   </div>
+  <button id="btn-hamburger" onclick="toggleSidebar()"
+    style="display:none;align-items:center;justify-content:center;
+           width:36px;height:36px;background:transparent;border:1px solid var(--border);
+           border-radius:var(--radius-sm);cursor:pointer;color:var(--text);font-size:18px;
+           margin-left:8px;flex-shrink:0">☰</button>
   <div class="topbar-center">
     <span id="topbarCityBadge" class="topbar-city-badge" style="display:none"></span>
     <select id="topbarCitySelect" style="display:none" onchange="onCityChange(this.value)">
@@ -500,6 +516,8 @@ tr.clickable:hover td { background: var(--accent-dim) !important; }
 <div id="sidebar" style="display:none">
   <div id="sidebarNav"></div>
 </div>
+<div class="sidebar-overlay" onclick="toggleSidebar()"
+  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:89"></div>
 
 <!-- ════════════════════════════════════════════
      MAIN CONTENT
@@ -992,6 +1010,13 @@ function cidadesVisiveis() {
   return CIDADES;
 }
 
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.querySelector('.sidebar-overlay');
+  const isOpen = sidebar.classList.toggle('open');
+  if (overlay) overlay.style.display = isOpen ? 'block' : 'none';
+}
+
 /* ══════════════════════════════════════════════════════════════
    BLOCO 8 — TOPBAR CIDADE
 ══════════════════════════════════════════════════════════════ */
@@ -1105,6 +1130,14 @@ function showTab(tabId) {
   if (pane) pane.classList.add('active');
   const navItem = document.getElementById(`nav-${tabId}`);
   if (navItem) navItem.classList.add('active');
+
+  // Fecha sidebar no mobile ao navegar
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.querySelector('.sidebar-overlay');
+  if (sidebar.classList.contains('open')) {
+    sidebar.classList.remove('open');
+    if (overlay) overlay.style.display = 'none';
+  }
 
   onTabChange(tabId);
 }
@@ -1222,6 +1255,28 @@ async function renderDashboard() {
     // Carrega produção e receitas em paralelo
     const receitasPromise = carregarReceitas();
 
+    // Carrega solicitações para os cards financeiros
+    const solicPromise = sheetsRead(SHEET_GERAL, 'Solicitações!A:W').then(rows => {
+      if (!rows || rows.length < 2) return { totalSolicitado: 0, totalPago: 0, totalPendente: 0 };
+      const header = rows[0];
+      let escopo = rows.slice(1)
+        .map(r => rowToObj(header, r))
+        .filter(r => r.STATUS && r.STATUS !== 'Rejeitado');
+      // Filtrar por cidade ativa
+      if (CIDADE_ATIVA && CIDADE_ATIVA !== 'todas') {
+        escopo = escopo.filter(r => normCid(r.CIDADE) === normCid(CIDADE_ATIVA));
+      }
+      const totalSolicitado = escopo
+        .filter(r => r.STATUS !== 'Pago')
+        .reduce((s, r) => s + parseBRL(r['VALOR PARCELA (R$)'] || r['VALOR SOLICITADO (R$)'] || 0), 0);
+      const totalPagoSolic = escopo
+        .reduce((s, r) => s + parseBRL(r['VALOR PAGO (R$)'] || 0), 0);
+      const totalPendenteSolic = escopo
+        .filter(r => !['Pago'].includes(r.STATUS))
+        .reduce((s, r) => s + parseBRL(r['VALOR PARCELA (R$)'] || r['VALOR SOLICITADO (R$)'] || 0), 0) - totalPagoSolic;
+      return { totalSolicitado, totalPago: totalPagoSolic, totalPendente: Math.max(0, totalPendenteSolic) };
+    }).catch(() => ({ totalSolicitado: 0, totalPago: 0, totalPendente: 0 }));
+
     if (CIDADE_ATIVA === 'todas') {
       const resultados = await Promise.all(
         CIDADES.map(c => c.idSheet ? carregarProducao(c.idSheet).catch(() => null) : Promise.resolve(null))
@@ -1256,6 +1311,7 @@ async function renderDashboard() {
 
     // Receita prevista (filtra por cidade ou soma todas)
     const receitas = await receitasPromise;
+    const solicMetrics = await solicPromise;
     let totalReceita = 0;
     if (CIDADE_ATIVA === 'todas') {
       totalReceita = receitas.total;
@@ -1309,6 +1365,33 @@ async function renderDashboard() {
           <div class="metric-label" style="color:var(--text3)">Referência 2025</div>
           <div class="metric-value sm" style="color:var(--text3);font-size:18px">${formatBRL(totalCusto25)}</div>
           <div class="metric-sub">custo do ano anterior</div>
+        </div>
+      </div>
+
+      <!-- Cards de Solicitações -->
+      <div style="margin:0 0 8px;padding-top:4px">
+        <span style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:0.1em">Solicitações de Pagamento</span>
+      </div>
+      <div class="cards-grid" style="margin-bottom:24px">
+        <div class="metric-card green">
+          <div class="metric-icon">💰</div>
+          <div class="metric-label">Total Pago</div>
+          <div class="metric-value sm">${formatBRL(solicMetrics.totalPago)}</div>
+          <div class="metric-sub">pagamentos confirmados</div>
+        </div>
+        <div class="metric-card red">
+          <div class="metric-icon">📤</div>
+          <div class="metric-label">A Pagar</div>
+          <div class="metric-value sm">${formatBRL(solicMetrics.totalPendente)}</div>
+          <div class="metric-sub">solicitações em aberto</div>
+        </div>
+        <div class="metric-card ${(totalReceita - solicMetrics.totalPago) >= 0 ? 'blue' : 'red'}">
+          <div class="metric-icon">${(totalReceita - solicMetrics.totalPago) >= 0 ? '📊' : '⚠️'}</div>
+          <div class="metric-label">Resultado Real</div>
+          <div class="metric-value sm" style="color:${(totalReceita - solicMetrics.totalPago) >= 0 ? 'var(--blue)' : 'var(--red)'}">
+            ${formatBRL(totalReceita - solicMetrics.totalPago)}
+          </div>
+          <div class="metric-sub">receita recebida − pago</div>
         </div>
       </div>
 
@@ -1722,7 +1805,7 @@ function abrirModalProd(rowIndex) {
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--border)">
       <button class="btn btn-secondary" onclick="fecharModal()">Cancelar</button>
-      <button class="btn btn-primary" id="pf-btn-salvar" onclick="salvarItemProd(${isEdicao ? rowIndex : 'null'})">
+      <button class="btn btn-primary" id="pf-btn-salvar" onclick="salvarItemProd(${isEdicao ? rowIndex : ''})">
         ${isEdicao ? 'Salvar Alterações' : 'Adicionar Item'}
       </button>
     </div>
@@ -1856,6 +1939,19 @@ function renderSolicTabela(content) {
   // Filtros ativos (apenas status — filtro de cidade foi removido em Bug #2)
   if (solicFiltroSt) dados = dados.filter(r => r.STATUS === solicFiltroSt);
 
+  // Ordenar por data de vencimento (col T = DATA PAGAMENTO) — mais próximas primeiro
+  // Status Pago/Rejeitado vão para o fim
+  const statusOrdem = { 'Em aberto': 0, 'Pagamento aprovado': 1, 'Solicitado a MeuBilhete': 2, 'Pago parcial': 3, 'Pago': 4, 'Rejeitado': 5 };
+  dados = [...dados].sort((a, b) => {
+    const stA = statusOrdem[a.STATUS] ?? 9;
+    const stB = statusOrdem[b.STATUS] ?? 9;
+    if (stA !== stB) return stA - stB;
+    // Dentro do mesmo status, ordena por vencimento crescente
+    const dA = a['DATA PAGAMENTO'] ? isoToInput(normalizarData(a['DATA PAGAMENTO'])) : '9999';
+    const dB = b['DATA PAGAMENTO'] ? isoToInput(normalizarData(b['DATA PAGAMENTO'])) : '9999';
+    return dA.localeCompare(dB);
+  });
+
   const statusList = ['Em aberto','Pagamento aprovado','Solicitado a MeuBilhete','Pago parcial','Pago','Rejeitado'];
 
   content.innerHTML = `
@@ -1874,10 +1970,13 @@ function renderSolicTabela(content) {
         : `<div class="table-wrap"><table>
             <thead><tr>
               <th>Data</th><th>Cidade</th><th>Solicitante</th><th>Item</th>
-              <th>Valor</th><th>Parcela</th><th>Favorecido</th><th>Status</th>
+              <th>Valor</th><th>Parcela</th><th>Vencimento</th><th>Status</th>
             </tr></thead>
             <tbody>
-              ${dados.map((r,i) => `
+              ${dados.map((r,i) => {
+                const venc = r['DATA PAGAMENTO'] ? normalizarData(r['DATA PAGAMENTO']) : '—';
+                const vencAtrasado = venc !== '—' && !['Pago','Rejeitado'].includes(r.STATUS) && isoToInput(normalizarData(venc)) < dataHoje().split('/').reverse().join('-');
+                return `
                 <tr class="clickable" onclick="abrirDetalheSolic(${r._rowIndex})" title="Clique para ver detalhes">
                   <td>${r.DATA||'—'}</td>
                   <td>${r.CIDADE||'—'}</td>
@@ -1885,9 +1984,9 @@ function renderSolicTabela(content) {
                   <td class="text-main">${r.ITEM||'—'}</td>
                   <td>${formatBRL(parseBRL(r['VALOR SOLICITADO (R$)']||0))}</td>
                   <td>${r.PARCELAS||'à vista'}</td>
-                  <td>${r.FAVORECIDO||'—'}</td>
+                  <td style="color:${vencAtrasado?'var(--red)':'inherit'};font-weight:${vencAtrasado?'600':'400'}">${venc}${vencAtrasado?' ⚠':''}}</td>
                   <td><span class="badge ${badgeSolicStatus(r.STATUS)}">${r.STATUS||'—'}</span></td>
-                </tr>`).join('')}
+                </tr>`;}).join('')}
             </tbody>
           </table></div>`
       }
