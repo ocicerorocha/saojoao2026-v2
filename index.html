@@ -370,7 +370,7 @@ select.filter-select:focus { border-color: var(--accent); }
   border-radius: 8px; padding: 1px 6px; min-width: 16px; text-align: center;
 }
 .filter-multi-dropdown {
-  position: absolute; top: calc(100% + 4px); left: 0; z-index: 50;
+  position: fixed; z-index: 9999;
   background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--radius-sm);
   min-width: 220px; max-height: 280px; overflow-y: auto;
   box-shadow: 0 8px 24px rgba(0,0,0,0.4); padding: 6px;
@@ -1981,7 +1981,32 @@ function toggleMultiSelectDropdown(id) {
   const isOpen = dd.style.display !== 'none';
   // fecha todos os outros
   document.querySelectorAll('.filter-multi-dropdown').forEach(el => el.style.display = 'none');
-  dd.style.display = isOpen ? 'none' : 'block';
+  if (isOpen) { dd.style.display = 'none'; return; }
+
+  // Localiza o botão do filtro para posicionar o dropdown (position:fixed →
+  // relativo à viewport, então calculamos a partir do retângulo do botão)
+  const wrapper = dd.closest('.filter-multi');
+  const btn = wrapper && wrapper.querySelector('.filter-multi-btn');
+  dd.style.display = 'block';
+  if (!btn) return;
+
+  const b = btn.getBoundingClientRect();
+  const ddW = dd.offsetWidth || 220;
+  const ddH = dd.offsetHeight || 280;
+  const margin = 8;
+
+  // Horizontal: alinha à esquerda do botão; se sair pela direita, alinha pela direita
+  let left = b.left;
+  if (left + ddW > window.innerWidth - margin) {
+    left = Math.max(margin, b.right - ddW);
+  }
+  // Vertical: abre abaixo; se não couber, abre acima
+  let top = b.bottom + 4;
+  if (top + ddH > window.innerHeight - margin && b.top - ddH - 4 > margin) {
+    top = b.top - ddH - 4;
+  }
+  dd.style.left = `${Math.round(left)}px`;
+  dd.style.top  = `${Math.round(top)}px`;
 }
 
 function onMultiSelectToggle(id, value, checked) {
@@ -2018,6 +2043,14 @@ document.addEventListener('click', (e) => {
     document.querySelectorAll('.filter-multi-dropdown').forEach(el => el.style.display = 'none');
   }
 });
+
+// Fecha dropdowns ao rolar a página (dropdown é position:fixed —
+// rolagem desalinharia em relação ao botão)
+window.addEventListener('scroll', () => {
+  document.querySelectorAll('.filter-multi-dropdown').forEach(el => {
+    if (el.style.display !== 'none') el.style.display = 'none';
+  });
+}, true);
 
 // Etapas do formulário
 let _solicEtapa = 1;
@@ -3136,9 +3169,9 @@ function renderAprovacoesView() {
   const temFiltro = aprovFiltroSt.length || aprovFiltroSolic.length || aprovFiltroFav.length;
 
   content.innerHTML = `
-    <div class="section-block" style="margin-bottom:16px">
-      <div class="section-block-header" style="flex-wrap:wrap;gap:10px">
-        <h3>Filtros</h3>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:20px;padding:16px 20px;overflow:visible;position:relative;z-index:60">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <h3 style="font-size:14px;font-weight:600;margin:0">Filtros</h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           ${renderMultiSelect('aprov-st', 'Status', statusListAprov, aprovFiltroSt)}
           ${renderMultiSelect('aprov-solic', 'Solicitante', solicOpts, aprovFiltroSolic)}
