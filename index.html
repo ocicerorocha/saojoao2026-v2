@@ -355,6 +355,48 @@ select.filter-select {
 }
 select.filter-select:focus { border-color: var(--accent); }
 
+/* ── RECURSO 3: FILTRO MULTI-SELECT ── */
+.filter-multi { position: relative; display: inline-block; }
+.filter-multi-btn {
+  background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 7px 12px; font-size: 12px; color: var(--text); font-family: var(--font);
+  cursor: pointer; outline: none; transition: border-color var(--transition);
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.filter-multi-btn:hover { border-color: var(--border2); }
+.filter-multi-btn.has-sel { border-color: var(--accent); color: var(--accent); }
+.filter-multi-count {
+  background: var(--accent); color: #1a1200; font-size: 10px; font-weight: 700;
+  border-radius: 8px; padding: 1px 6px; min-width: 16px; text-align: center;
+}
+.filter-multi-dropdown {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 50;
+  background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--radius-sm);
+  min-width: 220px; max-height: 280px; overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4); padding: 6px;
+}
+.filter-multi-dropdown .fm-search {
+  width: 100%; background: var(--bg2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 6px 8px; font-size: 12px;
+  color: var(--text); font-family: var(--font); outline: none; margin-bottom: 6px;
+}
+.filter-multi-opt {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  font-size: 12px; color: var(--text2); cursor: pointer; border-radius: 4px;
+  user-select: none;
+}
+.filter-multi-opt:hover { background: var(--bg4); color: var(--text); }
+.filter-multi-opt input { accent-color: var(--accent); cursor: pointer; }
+.filter-multi-actions {
+  display: flex; justify-content: space-between; gap: 8px;
+  padding: 6px 4px 2px; border-top: 1px solid var(--border); margin-top: 4px;
+}
+.filter-multi-actions button {
+  background: none; border: none; color: var(--accent); font-size: 11px;
+  cursor: pointer; font-family: var(--font); padding: 2px 4px;
+}
+.filter-multi-actions button:hover { text-decoration: underline; }
+
 /* ── TABLE STICKY ── */
 .table-prod-wrap { overflow-x: auto; overflow-y: auto; max-height: calc(100vh - 260px); }
 .table-prod-wrap table { min-width: 900px; }
@@ -1416,11 +1458,13 @@ let prodData = [];
 let _prodCidade = ''; // cidade quando prodData foi carregado
 
 const STATUS_PROD = [
-  'Pendente','Orçado','Pagamento solicitado','Pagamento aprovado',
+  'Pendente','Orçado','Confirmado','Pagamento solicitado','Pagamento aprovado',
   'Solicitado a MeuBilhete','Pago parcial','Pago','Item cancelado'
 ];
 // Status disponíveis para criar/editar manualmente
-const STATUS_PROD_EDIT = ['Pendente', 'Orçado', 'Item cancelado'];
+const STATUS_PROD_EDIT = ['Pendente', 'Orçado', 'Confirmado', 'Item cancelado'];
+// RECURSO 1: status de itens que podem entrar numa solicitação de pagamento
+const STATUS_SOLICITAVEL = ['Orçado', 'Confirmado'];
 
 function podEditarProd() {
   return USUARIO.perfil === 'mestre' || USUARIO.perfil === 'prod';
@@ -1448,6 +1492,7 @@ function renderProducaoShell() {
     ? `<button class="btn btn-primary" onclick="abrirModalProd()">+ Novo Item</button>`
     : '';
   c.innerHTML = `
+    <div id="prod-cards" style="margin-bottom:16px"></div>
     <div class="section-block">
       <div class="section-block-header" style="flex-wrap:wrap;gap:12px">
         <div class="filter-bar" id="prod-filter-bar" style="margin:0;flex:1">
@@ -1521,6 +1566,10 @@ function setProdBusca(val) { prodBuscaTxt = val.toLowerCase(); renderProdTabela(
 function renderProdTabela() {
   const wrap = document.getElementById('prod-tabela-wrap');
   if (!wrap) return;
+
+  // RECURSO 4: cards sempre refletem os totais reais da cidade (prodData
+  // completo, sem aplicar filtros de categoria/status/busca da tabela)
+  renderProdCards();
 
   let dados = prodData;
   if (prodCatFiltro !== 'todas') dados = dados.filter(r => r.CATEGORIA === prodCatFiltro);
@@ -1618,10 +1667,66 @@ function renderProdTabela() {
   });
 }
 
+/* ──────────────────────────────────────────────────────────────
+   RECURSO 4 — Cards de resumo da aba Produção
+   Calcula sobre prodData (já filtrado por cidade na carga), SEM
+   aplicar os filtros ativos da tabela. Card "Total 2026" + um card
+   por status com valor e contagem de itens.
+   ────────────────────────────────────────────────────────────── */
+function renderProdCards() {
+  const el = document.getElementById('prod-cards');
+  if (!el) return;
+  const dados = prodData;
+
+  const totalGeral = dados.reduce((s, r) => s + parseBRL(r['TOTAL 2026 (R$)'] || 0), 0);
+
+  const statusList = ['Pendente','Orçado','Confirmado','Pagamento solicitado',
+    'Pagamento aprovado','Solicitado a MeuBilhete','Pago parcial','Pago','Item cancelado'];
+
+  const porStatus = {};
+  statusList.forEach(st => { porStatus[st] = { valor: 0, itens: 0 }; });
+  dados.forEach(r => {
+    const st = (r['STATUS'] || '').trim();
+    if (!st || !porStatus[st]) return;
+    porStatus[st].valor += parseBRL(r['TOTAL 2026 (R$)'] || 0);
+    porStatus[st].itens++;
+  });
+
+  const corPorStatus = (st) => {
+    if (st === 'Pago' || st === 'Pago parcial') return 'var(--green)';
+    if (st === 'Pagamento aprovado' || st === 'Pagamento solicitado' ||
+        st === 'Solicitado a MeuBilhete' || st === 'Confirmado') return 'var(--blue)';
+    if (st === 'Orçado') return 'var(--accent)';
+    if (st === 'Item cancelado') return 'var(--red)';
+    return 'var(--text2)';
+  };
+
+  const cardsStatus = statusList.map(st => {
+    const d = porStatus[st];
+    return `
+      <div class="metric-card" style="padding:12px 14px">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">${st}</div>
+        <div style="font-size:16px;font-weight:700;color:${corPorStatus(st)}">${formatBRL(d.valor)}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:3px">${d.itens} ${d.itens === 1 ? 'item' : 'itens'}</div>
+      </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+      <div class="metric-card accent" style="padding:12px 14px;border-color:var(--accent)">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Total 2026</div>
+        <div style="font-size:18px;font-weight:800;color:var(--accent)">${formatBRL(totalGeral)}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:3px">todos os status · ${dados.length} ${dados.length === 1 ? 'item' : 'itens'}</div>
+      </div>
+      ${cardsStatus}
+    </div>`;
+}
+
 function badgeProdStatus(st) {
   if (st === 'Pago') return 'badge-green';
   if (st === 'Pago parcial') return 'badge-green';
   if (st === 'Pagamento aprovado' || st === 'Pagamento solicitado' || st === 'Solicitado a MeuBilhete') return 'badge-blue';
+  if (st === 'Confirmado') return 'badge-blue';
   if (st === 'Orçado') return 'badge-accent';
   if (st === 'Item cancelado') return 'badge-red';
   return 'badge-gray';
@@ -1722,7 +1827,7 @@ function abrirModalProd(rowIndex) {
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px;padding-top:16px;border-top:1px solid var(--border)">
       <button class="btn btn-secondary" onclick="fecharModal()">Cancelar</button>
-      <button class="btn btn-primary" id="pf-btn-salvar" onclick="salvarItemProd(${isEdicao ? rowIndex : ''})">
+      <button class="btn btn-primary" id="pf-btn-salvar" onclick="salvarItemProd(${isEdicao ? parseInt(rowIndex) : "''"})">
         ${isEdicao ? 'Salvar Alterações' : 'Adicionar Item'}
       </button>
     </div>
@@ -1745,6 +1850,13 @@ function calcTotalProd() {
 }
 
 async function salvarItemProd(rowIndex) {
+  // BUG 1: guard robusto — só é edição se rowIndex for inteiro válido >= 2.
+  // Evita que '', null, undefined, 0 ou 'null' caiam no caminho de append (duplicação).
+  const isEdit = rowIndex !== '' && rowIndex !== null &&
+                 rowIndex !== undefined && !isNaN(parseInt(rowIndex)) &&
+                 parseInt(rowIndex) >= 2;
+  const rowIdx = isEdit ? parseInt(rowIndex) : null;
+
   const sheetId = cidadeSheet(CIDADE_ATIVA);
   if (!sheetId) { showToast('Planilha não encontrada.', 'error'); return; }
 
@@ -1767,8 +1879,8 @@ async function salvarItemProd(rowIndex) {
 
   // Valor pago: mantém o existente se for edição
   let valPago = 0;
-  if (rowIndex) {
-    const existing = prodData.find(r => r._rowIndex === rowIndex);
+  if (isEdit) {
+    const existing = prodData.find(r => r._rowIndex === rowIdx);
     if (existing) valPago = parseBRL(existing['VALOR PAGO (R$)'] || 0);
   }
 
@@ -1779,13 +1891,13 @@ async function salvarItemProd(rowIndex) {
   const btn = document.getElementById('pf-btn-salvar');
   await btnRun(btn, async () => {
     try {
-      if (rowIndex) {
+      if (isEdit) {
         // Edição — registra no histórico
-        const anterior = prodData.find(r => r._rowIndex === rowIndex);
+        const anterior = prodData.find(r => r._rowIndex === rowIdx);
         const totAnterior = parseBRL(anterior?.['TOTAL 2026 (R$)'] || 0);
         const variacao = totAnterior > 0 ? ((tot - totAnterior) / totAnterior * 100).toFixed(1) : '—';
 
-        await sheetsWrite(sheetId, `Produção!A${rowIndex}:N${rowIndex}`, [row]);
+        await sheetsWrite(sheetId, `Produção!A${rowIdx}:N${rowIdx}`, [row]);
 
         // Grava no Alertas & Histórico
         const histRow = [textoData(agora()), USUARIO.nome, item, cidadeNome(CIDADE_ATIVA),
@@ -1796,7 +1908,7 @@ async function salvarItemProd(rowIndex) {
       }
       cacheInvalidate(`${sheetId}::Produção!A:N`);
       fecharModal();
-      showToast(rowIndex ? 'Item atualizado!' : 'Item adicionado!', 'success');
+      showToast(isEdit ? 'Item atualizado!' : 'Item adicionado!', 'success');
       // Recarrega
       await carregarDadosProd();
     } catch (e) {
@@ -1810,8 +1922,102 @@ async function salvarItemProd(rowIndex) {
 ══════════════════════════════════════════════════════════════ */
 let solicData = [];   // solicitações carregadas
 let _solicCidade = '';
-let solicFiltroSt = '';
+// RECURSO 3: filtros multi-select (arrays — vazio = sem filtro)
+let solicFiltroSt = [];      // status selecionados
+let solicFiltroSolic = [];   // solicitantes selecionados
+let solicFiltroFav = [];     // favorecidos selecionados
 // Bug #2: filtro de cidade local removido — agora usa CIDADE_ATIVA do topbar
+
+/* ──────────────────────────────────────────────────────────────
+   RECURSO 3 — Componente genérico de filtro multi-select
+   Usado em Solicitações e Aprovações. Estado mantido em arrays
+   globais; cada instância é identificada por um id único.
+   ────────────────────────────────────────────────────────────── */
+const _multiSelState = {}; // { [id]: { options:[], selected:[], onChange:fn } }
+
+function renderMultiSelect(id, label, options, selected) {
+  const sel = Array.isArray(selected) ? selected : [];
+  const count = sel.length;
+  const opts = [...new Set(options.filter(o => o !== '' && o != null))].sort((a, b) =>
+    String(a).localeCompare(String(b), 'pt-BR'));
+  const optsHtml = opts.map(o => {
+    const checked = sel.includes(o) ? 'checked' : '';
+    const safe = String(o).replace(/"/g, '&quot;');
+    return `<label class="filter-multi-opt">
+      <input type="checkbox" value="${safe}" ${checked}
+        onchange="onMultiSelectToggle('${id}', this.value, this.checked)">
+      <span>${o}</span>
+    </label>`;
+  }).join('');
+  return `
+    <div class="filter-multi" data-msid="${id}">
+      <button type="button" class="filter-multi-btn ${count ? 'has-sel' : ''}"
+        onclick="toggleMultiSelectDropdown('${id}')">
+        ${label}${count ? ` <span class="filter-multi-count">${count}</span>` : ''} ▾
+      </button>
+      <div class="filter-multi-dropdown" id="ms-dd-${id}" style="display:none">
+        <input type="text" class="fm-search" placeholder="Buscar..."
+          oninput="filterMultiSelectOptions('${id}', this.value)">
+        <div id="ms-opts-${id}">${optsHtml || '<div style="padding:8px;font-size:12px;color:var(--text3)">Nenhuma opção</div>'}</div>
+        <div class="filter-multi-actions">
+          <button type="button" onclick="multiSelectAll('${id}', true)">Selecionar todos</button>
+          <button type="button" onclick="multiSelectAll('${id}', false)">Limpar</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function _registerMultiSelect(id, options, selected, onChange) {
+  _multiSelState[id] = {
+    options: [...new Set(options.filter(o => o !== '' && o != null))],
+    selected: Array.isArray(selected) ? selected : [],
+    onChange
+  };
+}
+
+function toggleMultiSelectDropdown(id) {
+  const dd = document.getElementById(`ms-dd-${id}`);
+  if (!dd) return;
+  const isOpen = dd.style.display !== 'none';
+  // fecha todos os outros
+  document.querySelectorAll('.filter-multi-dropdown').forEach(el => el.style.display = 'none');
+  dd.style.display = isOpen ? 'none' : 'block';
+}
+
+function onMultiSelectToggle(id, value, checked) {
+  const st = _multiSelState[id];
+  if (!st) return;
+  if (checked) {
+    if (!st.selected.includes(value)) st.selected.push(value);
+  } else {
+    st.selected = st.selected.filter(v => v !== value);
+  }
+  if (typeof st.onChange === 'function') st.onChange(st.selected.slice());
+}
+
+function multiSelectAll(id, selectAll) {
+  const st = _multiSelState[id];
+  if (!st) return;
+  st.selected = selectAll ? st.options.slice() : [];
+  if (typeof st.onChange === 'function') st.onChange(st.selected.slice());
+}
+
+function filterMultiSelectOptions(id, termo) {
+  const cont = document.getElementById(`ms-opts-${id}`);
+  if (!cont) return;
+  const t = termo.toLowerCase().trim();
+  cont.querySelectorAll('.filter-multi-opt').forEach(el => {
+    const txt = (el.textContent || '').toLowerCase();
+    el.style.display = !t || txt.includes(t) ? 'flex' : 'none';
+  });
+}
+
+// Fecha dropdowns ao clicar fora
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.filter-multi')) {
+    document.querySelectorAll('.filter-multi-dropdown').forEach(el => el.style.display = 'none');
+  }
+});
 
 // Etapas do formulário
 let _solicEtapa = 1;
@@ -1853,8 +2059,13 @@ async function renderSolicTabela(content) {
     dados = dados.filter(r => normCid(r.CIDADE) === normCid(CIDADE_ATIVA));
   }
 
-  // Filtros ativos (apenas status — filtro de cidade foi removido em Bug #2)
-  if (solicFiltroSt) dados = dados.filter(r => r.STATUS === solicFiltroSt);
+  // RECURSO 3: escopo de cidade (antes dos filtros multi) — base das opções
+  const escopoCidade = dados.slice();
+
+  // RECURSO 3: filtros multi-select (array vazio = sem filtro)
+  if (solicFiltroSt.length)    dados = dados.filter(r => solicFiltroSt.includes(r.STATUS));
+  if (solicFiltroSolic.length) dados = dados.filter(r => solicFiltroSolic.includes(r.SOLICITANTE));
+  if (solicFiltroFav.length)   dados = dados.filter(r => solicFiltroFav.includes(r.FAVORECIDO));
 
   // Ordenar: status prioritários primeiro, depois por vencimento crescente
   const statusOrdem = {'Em aberto':0,'Pagamento aprovado':1,'Solicitado a MeuBilhete':2,'Pago parcial':3,'Pago':4,'Rejeitado':5};
@@ -1862,13 +2073,23 @@ async function renderSolicTabela(content) {
     const sa = statusOrdem[a.STATUS] ?? 9;
     const sb = statusOrdem[b.STATUS] ?? 9;
     if (sa !== sb) return sa - sb;
-    const da = a['DATA PAGAMENTO'] ? isoToInput(normalizarData(a['DATA PAGAMENTO'])) : '9999-99-99';
-    const db = b['DATA PAGAMENTO'] ? isoToInput(normalizarData(b['DATA PAGAMENTO'])) : '9999-99-99';
+    // BUG 4: normaliza qualquer formato (serial, YYYY-MM-DD, DD/MM/AAAA) →
+    // DD/MM/AAAA via normalizarData, depois → YYYY-MM-DD via isoToInput
+    // (formato comparável). Datas vazias/ inválidas vão para o fim.
+    const toComparable = (raw) => {
+      if (!raw) return '9999-99-99';
+      const br = normalizarData(raw);
+      if (!br || !/^\d{2}\/\d{2}\/\d{4}/.test(br)) return '9999-99-99';
+      const iso = isoToInput(br);
+      return /^\d{4}-\d{2}-\d{2}/.test(iso) ? iso : '9999-99-99';
+    };
+    const da = toComparable(a['DATA PAGAMENTO']);
+    const db = toComparable(b['DATA PAGAMENTO']);
     return da.localeCompare(db);
   });
 
-  // Calcular métricas para os cards (respeitam filtro de status se ativo)
-  const todosSolic = solicFiltroSt ? solicData : dados; // cards sempre sobre escopo de cidade, sem filtro de status
+  // Calcular métricas para os cards (sempre sobre o escopo de cidade,
+  // independente dos filtros multi-select ativos)
   const scopeCards = (() => {
     let d = solicData;
     if (p === 'prod') d = d.filter(r => normCid(r.CIDADE) === normCid(CIDADE_ATIVA));
@@ -1876,7 +2097,11 @@ async function renderSolicTabela(content) {
     return d;
   })();
 
-  const cardPago = scopeCards.reduce((s, r) => s + parseBRL(r['VALOR PAGO (R$)'] || 0), 0);
+  // BUG 3: soma VALOR PAGO (col W) apenas das linhas efetivamente pagas
+  // (STATUS = 'Pago' ou 'Pago parcial'), ignorando demais status.
+  const cardPago = scopeCards
+    .filter(r => ['Pago', 'Pago parcial'].includes(r.STATUS))
+    .reduce((s, r) => s + parseBRL(r['VALOR PAGO (R$)'] || 0), 0);
   const cardAPagar = scopeCards
     .filter(r => ['Em aberto','Pagamento aprovado','Solicitado a MeuBilhete'].includes(r.STATUS))
     .reduce((s, r) => s + parseBRL(r['VALOR PARCELA (R$)'] || r['VALOR SOLICITADO (R$)'] || 0), 0);
@@ -1900,6 +2125,22 @@ async function renderSolicTabela(content) {
   const resultadoPositivo = cardResultado >= 0;
 
   const statusList = ['Em aberto','Pagamento aprovado','Solicitado a MeuBilhete','Pago parcial','Pago','Rejeitado'];
+
+  // RECURSO 3: opções de solicitante/favorecido a partir do escopo de cidade
+  const solicOpts = [...new Set(escopoCidade.map(r => r.SOLICITANTE).filter(Boolean))];
+  const favOpts   = [...new Set(escopoCidade.map(r => r.FAVORECIDO).filter(Boolean))];
+  _registerMultiSelect('solic-st', statusList, solicFiltroSt, (sel) => {
+    solicFiltroSt = sel;
+    renderSolicTabela(document.getElementById('solic-content')).catch(e => console.error(e));
+  });
+  _registerMultiSelect('solic-solic', solicOpts, solicFiltroSolic, (sel) => {
+    solicFiltroSolic = sel;
+    renderSolicTabela(document.getElementById('solic-content')).catch(e => console.error(e));
+  });
+  _registerMultiSelect('solic-fav', favOpts, solicFiltroFav, (sel) => {
+    solicFiltroFav = sel;
+    renderSolicTabela(document.getElementById('solic-content')).catch(e => console.error(e));
+  });
 
   content.innerHTML = `
     <!-- Cards de resumo financeiro -->
@@ -1936,10 +2177,12 @@ async function renderSolicTabela(content) {
       <div class="section-block-header" style="flex-wrap:wrap;gap:10px">
         <h3>Histórico de Solicitações <span class="badge badge-gray">${dados.length}</span></h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <select class="filter-select" id="sf-filtro-st" onchange="setSolicFiltro('st',this.value)">
-            <option value="">Todos os status</option>
-            ${statusList.map(s => `<option value="${s}" ${solicFiltroSt===s?'selected':''}>${s}</option>`).join('')}
-          </select>
+          ${renderMultiSelect('solic-st', 'Status', statusList, solicFiltroSt)}
+          ${renderMultiSelect('solic-solic', 'Solicitante', solicOpts, solicFiltroSolic)}
+          ${renderMultiSelect('solic-fav', 'Favorecido', favOpts, solicFiltroFav)}
+          ${(solicFiltroSt.length || solicFiltroSolic.length || solicFiltroFav.length)
+            ? `<button class="btn btn-secondary btn-sm" onclick="limparFiltrosSolic()">Limpar filtros</button>`
+            : ''}
         </div>
       </div>
       ${dados.length === 0
@@ -1947,7 +2190,7 @@ async function renderSolicTabela(content) {
         : `<div class="table-wrap"><table>
             <thead><tr>
               <th>Data</th><th>Cidade</th><th>Solicitante</th><th>Item</th>
-              <th>Valor</th><th>Parcela</th><th>Vencimento</th><th>Status</th>
+              <th>Valor Parcela</th><th>Parcela</th><th>Vencimento</th><th>Status</th>
             </tr></thead>
             <tbody>
               ${dados.map(r => {
@@ -1962,7 +2205,7 @@ async function renderSolicTabela(content) {
                   <td>${r.CIDADE||'—'}</td>
                   <td>${r.SOLICITANTE||'—'}</td>
                   <td class="text-main">${r.ITEM||'—'}</td>
-                  <td>${formatBRL(parseBRL(r['VALOR SOLICITADO (R$)']||0))}</td>
+                  <td>${formatBRL(parseBRL(r['VALOR PARCELA (R$)'] || r['VALOR SOLICITADO (R$)'] || 0))}</td>
                   <td>${r.PARCELAS||'à vista'}</td>
                   <td style="color:${atrasado?'var(--red)':'inherit'};font-weight:${atrasado?'600':'400'}">${venc}${atrasado?' ⚠':''}</td>
                   <td><span class="badge ${badgeSolicStatus(r.STATUS)}">${r.STATUS||'—'}</span></td>
@@ -1976,9 +2219,11 @@ async function renderSolicTabela(content) {
   `;
 }
 
-function setSolicFiltro(tipo, val) {
-  if (tipo === 'st') solicFiltroSt = val;
-  // Bug #2: filtro de cidade ('cid') removido — usa CIDADE_ATIVA do topbar
+function limparFiltrosSolic() {
+  // RECURSO 3: zera todos os filtros multi-select de Solicitações
+  solicFiltroSt = [];
+  solicFiltroSolic = [];
+  solicFiltroFav = [];
   renderSolicTabela(document.getElementById('solic-content')).catch(e => console.error(e));
 }
 
@@ -2048,7 +2293,7 @@ function abrirDetalheSolic(rowIndex) {
 
 function abrirFormSolicitacao() {
   _solicEtapa = 1;
-  _solicForm = {};
+  _solicForm = { _itemCustom: false, _prodRowIndex: null };
   _solicParcelas = [{ venc: '', valor: '' }];
   _solicParcelado = false;
   renderSolicModal();
@@ -2110,7 +2355,7 @@ function renderSolicStep1() {
     }
   }
 
-  const itensOrcados = prodData.filter(r => r['STATUS'] === 'Orçado');
+  const itensOrcados = prodData.filter(r => STATUS_SOLICITAVEL.includes(r['STATUS']));
   const cats = [...new Set(itensOrcados.map(r => r.CATEGORIA).filter(Boolean))];
   const catAtual = f.categoria || '';
   const isCustomCat = catAtual && !cats.includes(catAtual);
@@ -2146,7 +2391,7 @@ function renderSolicStep1() {
                 value="${isCustomCat ? catAtual : ''}" placeholder="Digite a categoria">
             </div>
             <div class="form-group">
-              <label>Item * <span style="font-size:10px;color:var(--accent);font-weight:400">(apenas itens Orçados)</span></label>
+              <label>Item * <span style="font-size:10px;color:var(--accent);font-weight:400">(itens Orçados ou Confirmados)</span></label>
               <select class="form-control" id="sf-item-sel" onchange="onSolicItemChange(this.value)">
                 <option value="">Selecione o item</option>
                 ${itensOrcados
@@ -2186,6 +2431,7 @@ function onSolicCidadeChange(val) {
   _solicForm.custo26 = '';
   _solicForm._fornecedorRef = '';
   _solicForm._prodRowIndex = null;
+  _solicForm._itemCustom = false; // RECURSO 2: reseta flag ao trocar cidade
   prodData = [];
   _prodCidade = '';
   document.getElementById('solic-step-body').innerHTML = renderSolicStep();
@@ -2196,7 +2442,7 @@ function onSolicCatChange(val) {
   else { custom.style.display = 'none'; }
   // Filtra itens pela categoria
   const itemSel = document.getElementById('sf-item-sel');
-  const itensOrcados = prodData.filter(r => r['STATUS'] === 'Orçado');
+  const itensOrcados = prodData.filter(r => STATUS_SOLICITAVEL.includes(r['STATUS']));
   const catReal = val === '__outro__' ? '' : val;
   itemSel.innerHTML = `<option value="">Selecione o item</option>` +
     itensOrcados.filter(r => !catReal || r.CATEGORIA === catReal)
@@ -2211,20 +2457,23 @@ function onSolicItemChange(val) {
     _solicForm._prodRowIndex = null;
     _solicForm.custo26 = '';
     _solicForm._fornecedorRef = '';
+    _solicForm._itemCustom = true; // RECURSO 2: item digitado → criar na Produção
     return;
   }
   custom.style.display = 'none';
   // Item da Produção: armazena rowIndex e custo26 já a partir do prodData carregado
   // (prodData aqui é, por garantia do Bug #1, da cidade selecionada no form)
-  const ref = prodData.find(r => r.ITEM === val && r['STATUS'] === 'Orçado');
+  const ref = prodData.find(r => r.ITEM === val && STATUS_SOLICITAVEL.includes(r['STATUS']));
   if (ref) {
     _solicForm._prodRowIndex = ref._rowIndex;
     _solicForm.custo26 = parseBRL(ref['TOTAL 2026 (R$)']||0).toFixed(2);
     _solicForm._fornecedorRef = ref.FORNECEDOR || '';
+    _solicForm._itemCustom = false; // RECURSO 2: veio da Produção
   } else {
     _solicForm._prodRowIndex = null;
     _solicForm.custo26 = '';
     _solicForm._fornecedorRef = '';
+    _solicForm._itemCustom = true; // RECURSO 2: não encontrado → tratar como custom
   }
 }
 
@@ -2518,16 +2767,22 @@ function solicProximo(etapaAtual) {
     // Bug #1: só usa prodData se foi carregado para a MESMA cidade do form
     // Caso contrário, custo26 deve ter sido setado em onSolicItemChange (ou ficará vazio)
     if (_prodCidade === cidade) {
-      const ref = prodData.find(r => r.ITEM && r.ITEM.toLowerCase() === item.toLowerCase() && r['STATUS'] === 'Orçado');
+      const ref = prodData.find(r => r.ITEM && r.ITEM.toLowerCase() === item.toLowerCase() && STATUS_SOLICITAVEL.includes(r['STATUS']));
       if (ref) {
         _solicForm.custo26 = parseBRL(ref['TOTAL 2026 (R$)']||0).toFixed(2);
         _solicForm._fornecedorRef = ref?.FORNECEDOR || '';
         _solicForm._prodRowIndex = ref._rowIndex;
+        _solicForm._itemCustom = false; // RECURSO 2: item existe na Produção
       } else {
         // Item digitado manualmente (não existe na Produção)
         _solicForm.custo26 = _solicForm.custo26 || '';
         _solicForm._prodRowIndex = null;
+        _solicForm._itemCustom = true;  // RECURSO 2: criar na Produção ao enviar
       }
+    } else {
+      // prodData não é da cidade do form: confia na flag setada em onSolicItemChange.
+      // Se _prodRowIndex está nulo, é item custom.
+      _solicForm._itemCustom = !_solicForm._prodRowIndex;
     }
   } else if (etapaAtual === 2) {
     const fav = document.getElementById('sf-fav')?.value.trim();
@@ -2736,8 +2991,40 @@ async function enviarSolicitacao() {
       await sheetsAppend(SHEET_GERAL, 'Solicitações!A:W', linhas);
       cacheInvalidate(`${SHEET_GERAL}::Solicitações!A:W`);
 
+      // RECURSO 2: item digitado manualmente ("Outro") não existe na Produção.
+      // Cria a linha correspondente já com status "Pagamento solicitado".
+      if (f._itemCustom && !f._prodRowIndex) {
+        try {
+          const sheetIdCustom = cidadeSheet(cidade);
+          if (sheetIdCustom) {
+            const valorRef = parseFloat(f.valor) || 0;
+            const novaLinha = [
+              f.categoria,                              // A=CATEGORIA
+              f.item,                                   // B=ITEM
+              1,                                        // C=QNT
+              1,                                        // D=DIAS
+              '',                                       // E=DATA INÍCIO
+              valorRef,                                 // F=VALOR UNIT (ref = valor solicitado)
+              0,                                        // G=CUSTO 2025
+              valorRef,                                 // H=TOTAL 2026
+              valorRef,                                 // I=DIFERENÇA
+              0,                                        // J=VALOR PAGO
+              'Pagamento solicitado',                   // K=STATUS
+              f.favorecido || '',                       // L=FORNECEDOR
+              `Criado via solicitação em ${dataHoje()}`,// M=OBS
+              ''                                        // N=SUBCATEGORIA
+            ];
+            await sheetsAppend(sheetIdCustom, 'Produção!A:N', [novaLinha]);
+            cacheInvalidate(`${sheetIdCustom}::Produção!A:N`);
+            showToast(`Item criado na Produção de ${nomeCidade} com status 'Pagamento solicitado'.`, 'success', 4500);
+          }
+        } catch (eCustom) {
+          console.warn('RECURSO 2: falha ao criar item custom na Produção:', eCustom);
+        }
+      }
+
       // Bug #5: propaga status para a Produção da PPP da cidade
-      // (item passa de "Orçado" → "Pagamento solicitado")
+      // (item passa de "Orçado"/"Confirmado" → "Pagamento solicitado")
       if (f._prodRowIndex) {
         atualizarStatusProducao(cidade, f._prodRowIndex, 'Pagamento solicitado', {
           item: f.item,
@@ -2764,6 +3051,12 @@ async function enviarSolicitacao() {
 /* ══════════════════════════════════════════════════════════════
    BLOCO 14 — APROVAÇÕES
 ══════════════════════════════════════════════════════════════ */
+// RECURSO 3: filtros multi-select de Aprovações (arrays — vazio = sem filtro)
+let aprovFiltroSt = [];
+let aprovFiltroSolic = [];
+let aprovFiltroFav = [];
+let _aprovEscopo = []; // escopo de cidade da última carga (para re-render sem refetch)
+
 async function iniciarAprovacoes() {
   if (USUARIO.perfil !== 'fin' && USUARIO.perfil !== 'mestre') {
     document.getElementById('aprov-content').innerHTML =
@@ -2802,18 +3095,72 @@ async function carregarAprovacoes() {
       escopo = escopo.filter(r => normCid(r.CIDADE) === normCid(CIDADE_ATIVA));
     }
 
-    const pendentes   = escopo.filter(r => r.STATUS === 'Em aberto');
-    const aprovadas   = escopo.filter(r => r.STATUS === 'Pagamento aprovado');
-    const aguardando  = escopo.filter(r => r.STATUS === 'Solicitado a MeuBilhete');
-
-    content.innerHTML = `
-      ${renderAprovSection('Pendentes de Aprovação', '🟡', pendentes, 'pendente')}
-      ${renderAprovSection('Pendente envio para MeuBilhete', '🔵', aprovadas, 'meubilhete')}
-      ${renderAprovSection('Confirmar Pagamento', '💚', aguardando, 'confirmar')}
-    `;
+    _aprovEscopo = escopo;
+    renderAprovacoesView();
   } catch (e) {
     content.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><p style="color:var(--red)">${e.message}</p></div>`;
   }
+}
+
+function renderAprovacoesView() {
+  const content = document.getElementById('aprov-content');
+  if (!content) return;
+  const escopo = _aprovEscopo;
+
+  // RECURSO 3: opções dos filtros a partir do escopo de cidade
+  const statusListAprov = ['Em aberto','Pagamento aprovado','Solicitado a MeuBilhete'];
+  const solicOpts = [...new Set(escopo.map(r => r.SOLICITANTE).filter(Boolean))];
+  const favOpts   = [...new Set(escopo.map(r => r.FAVORECIDO).filter(Boolean))];
+  _registerMultiSelect('aprov-st', statusListAprov, aprovFiltroSt, (sel) => {
+    aprovFiltroSt = sel; renderAprovacoesView();
+  });
+  _registerMultiSelect('aprov-solic', solicOpts, aprovFiltroSolic, (sel) => {
+    aprovFiltroSolic = sel; renderAprovacoesView();
+  });
+  _registerMultiSelect('aprov-fav', favOpts, aprovFiltroFav, (sel) => {
+    aprovFiltroFav = sel; renderAprovacoesView();
+  });
+
+  // RECURSO 3: aplica filtros Solicitante/Favorecido sobre todo o escopo
+  let filtrado = escopo;
+  if (aprovFiltroSolic.length) filtrado = filtrado.filter(r => aprovFiltroSolic.includes(r.SOLICITANTE));
+  if (aprovFiltroFav.length)   filtrado = filtrado.filter(r => aprovFiltroFav.includes(r.FAVORECIDO));
+
+  // Filtro de status controla quais seções aparecem (vazio = todas)
+  const mostraSt = (st) => !aprovFiltroSt.length || aprovFiltroSt.includes(st);
+
+  const pendentes   = filtrado.filter(r => r.STATUS === 'Em aberto');
+  const aprovadas   = filtrado.filter(r => r.STATUS === 'Pagamento aprovado');
+  const aguardando  = filtrado.filter(r => r.STATUS === 'Solicitado a MeuBilhete');
+
+  const temFiltro = aprovFiltroSt.length || aprovFiltroSolic.length || aprovFiltroFav.length;
+
+  content.innerHTML = `
+    <div class="section-block" style="margin-bottom:16px">
+      <div class="section-block-header" style="flex-wrap:wrap;gap:10px">
+        <h3>Filtros</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          ${renderMultiSelect('aprov-st', 'Status', statusListAprov, aprovFiltroSt)}
+          ${renderMultiSelect('aprov-solic', 'Solicitante', solicOpts, aprovFiltroSolic)}
+          ${renderMultiSelect('aprov-fav', 'Favorecido', favOpts, aprovFiltroFav)}
+          ${temFiltro
+            ? `<button class="btn btn-secondary btn-sm" onclick="limparFiltrosAprov()">Limpar filtros</button>`
+            : ''}
+        </div>
+      </div>
+    </div>
+    ${mostraSt('Em aberto') ? renderAprovSection('Pendentes de Aprovação', '🟡', pendentes, 'pendente') : ''}
+    ${mostraSt('Pagamento aprovado') ? renderAprovSection('Pendente envio para MeuBilhete', '🔵', aprovadas, 'meubilhete') : ''}
+    ${mostraSt('Solicitado a MeuBilhete') ? renderAprovSection('Confirmar Pagamento', '💚', aguardando, 'confirmar') : ''}
+  `;
+}
+
+function limparFiltrosAprov() {
+  // RECURSO 3: zera todos os filtros multi-select de Aprovações
+  aprovFiltroSt = [];
+  aprovFiltroSolic = [];
+  aprovFiltroFav = [];
+  renderAprovacoesView();
 }
 
 function renderAprovSection(titulo, emoji, dados, tipo) {
@@ -2829,7 +3176,7 @@ function renderAprovSection(titulo, emoji, dados, tipo) {
           ? `<div class="empty-state" style="padding:28px"><div class="icon" style="font-size:24px;margin-bottom:8px">✅</div><p>Nenhuma solicitação nesta etapa.</p></div>`
           : `<div class="table-wrap"><table>
               <thead><tr>
-                <th>Data Solic.</th><th>Cidade</th><th>Item</th><th>Valor</th>
+                <th>Data Solic.</th><th>Cidade</th><th>Item</th><th>Valor Parcela</th>
                 <th>Parcela</th><th>Favorecido</th><th>Vencimento</th><th>Ações</th>
               </tr></thead>
               <tbody>
@@ -2838,7 +3185,7 @@ function renderAprovSection(titulo, emoji, dados, tipo) {
                     <td>${r.DATA||'—'}</td>
                     <td>${r.CIDADE||'—'}</td>
                     <td class="text-main">${r.ITEM||'—'}</td>
-                    <td>${formatBRL(parseBRL(r['VALOR SOLICITADO (R$)']||0))}</td>
+                    <td>${formatBRL(parseBRL(r['VALOR PARCELA (R$)'] || r['VALOR SOLICITADO (R$)'] || 0))}</td>
                     <td>${r.PARCELAS||'à vista'}</td>
                     <td>${r.FAVORECIDO||'—'}</td>
                     <td>${r['DATA PAGAMENTO']||'—'}</td>
@@ -3186,15 +3533,37 @@ let recStatusFiltro = '';
 
 const REC_STATUS = ['Previsto', 'Confirmado', 'Recebido', 'Recebido parcial'];
 
-// Helper compartilhado: normaliza nome de cidade (remove acentos, lowercase, trim)
-// — usado para comparar valores da planilha ("Irecê", "Jequié", "Serrinha")
-// com os códigos internos do sistema ("irece", "jequie", "serrinha").
+// Helper compartilhado: normaliza nome de cidade para o CÓDIGO INTERNO.
+// BUG 2: agora resolve contra a aba CIDADES — aceita código ('cruz'),
+// nome completo ('Cruz das Almas'), com/sem acento — sempre retornando
+// o código interno ('cruz'). Isso garante que normCid(r.CIDADE) ===
+// normCid(CIDADE_ATIVA) funcione mesmo quando código ≠ nome da cidade.
 function normCid(s) {
-  return String(s || '')
+  if (s === null || s === undefined) return '';
+  const raw = String(s)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[—–]/g, '')
+    .trim();
+  if (!raw || raw === '-') return '';
+
+  const norm = (x) => String(x || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim();
+
+  if (Array.isArray(CIDADES) && CIDADES.length) {
+    // 1) casa pelo código interno
+    const porCodigo = CIDADES.find(c => norm(c.cidade) === raw);
+    if (porCodigo) return norm(porCodigo.cidade);
+    // 2) casa pelo nome completo
+    const porNome = CIDADES.find(c => norm(c.nome) === raw);
+    if (porNome) return norm(porNome.cidade);
+  }
+  // 3) fallback: string normalizada
+  return raw;
 }
 
 function recBadgeClass(st) {
@@ -3286,8 +3655,10 @@ function renderReceitasView(content) {
     if (st === 'Previsto' || st === 'Confirmado') previsto += v;
     if (st === 'Recebido' || st === 'Recebido parcial') recebido += v;
   });
-  const diferenca = previsto - recebido;
-  const corDif = diferenca <= 0 ? 'green' : 'red';
+  // BUG 5: "Total Previsto" = soma de TODAS as receitas, qualquer status
+  // (substitui o antigo card "A receber" que calculava previsto - recebido).
+  const totalPrevisto = dados.reduce((s, r) =>
+    s + parseBRL(r['VALOR (R$)'] || r.VALOR || 0), 0);
 
   // Categorias únicas para o filtro (mescla da aba Categorias com as usadas)
   const catsNosDados = [...new Set(dados.map(r => r.CATEGORIA).filter(Boolean))];
@@ -3303,9 +3674,10 @@ function renderReceitasView(content) {
         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">Recebido</div>
         <div style="font-size:20px;font-weight:700;color:var(--green)">${formatBRL(recebido)}</div>
       </div>
-      <div class="metric-card ${corDif}">
-        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">A receber</div>
-        <div style="font-size:20px;font-weight:700;color:var(--${corDif})">${formatBRL(diferenca)}</div>
+      <div class="metric-card accent">
+        <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">Total Previsto</div>
+        <div style="font-size:20px;font-weight:700;color:var(--accent)">${formatBRL(totalPrevisto)}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px">todas as receitas</div>
       </div>
       <div class="metric-card">
         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">Nº entradas</div>
