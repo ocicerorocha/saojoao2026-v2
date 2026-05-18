@@ -1168,7 +1168,7 @@ function onTabChange(tabId) {
 
 // Status válidos (ignora lixo como "350", strings numéricas, etc)
 const STATUS_VALIDOS = new Set([
-  'Pendente','Orçado','Pagamento solicitado','Pagamento aprovado',
+  'Pendente','Orçado','Confirmado','Pagamento solicitado','Pagamento aprovado',
   'Solicitado a MeuBilhete','Pago parcial','Pago','Item cancelado'
 ]);
 
@@ -1678,17 +1678,22 @@ function renderProdCards() {
   if (!el) return;
   const dados = prodData;
 
+  // "Total 2026" continua sendo o orçado total (coluna H) — é o teto orçamentário
   const totalGeral = dados.reduce((s, r) => s + parseBRL(r['TOTAL 2026 (R$)'] || 0), 0);
 
   const statusList = ['Pendente','Orçado','Confirmado','Pagamento solicitado',
     'Pagamento aprovado','Solicitado a MeuBilhete','Pago parcial','Pago','Item cancelado'];
 
+  // Decisão de design (ponto 5A): os cards por status mostram o VALOR JÁ PAGO
+  // (coluna J = 'VALOR PAGO (R$)', com fallback 'PAGO'), não o orçado.
+  // Assim "Pago: R$ X" significa de fato quanto foi desembolsado nos itens
+  // daquele status — não o valor orçado deles.
   const porStatus = {};
   statusList.forEach(st => { porStatus[st] = { valor: 0, itens: 0 }; });
   dados.forEach(r => {
     const st = (r['STATUS'] || '').trim();
     if (!st || !porStatus[st]) return;
-    porStatus[st].valor += parseBRL(r['TOTAL 2026 (R$)'] || 0);
+    porStatus[st].valor += parseBRL(r['VALOR PAGO (R$)'] || r['PAGO'] || 0);
     porStatus[st].itens++;
   });
 
@@ -1707,7 +1712,7 @@ function renderProdCards() {
       <div class="metric-card" style="padding:12px 14px">
         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">${st}</div>
         <div style="font-size:16px;font-weight:700;color:${corPorStatus(st)}">${formatBRL(d.valor)}</div>
-        <div style="font-size:10px;color:var(--text3);margin-top:3px">${d.itens} ${d.itens === 1 ? 'item' : 'itens'}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:3px">pago · ${d.itens} ${d.itens === 1 ? 'item' : 'itens'}</div>
       </div>`;
   }).join('');
 
@@ -1716,7 +1721,7 @@ function renderProdCards() {
       <div class="metric-card accent" style="padding:12px 14px;border-color:var(--accent)">
         <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px">Total 2026</div>
         <div style="font-size:18px;font-weight:800;color:var(--accent)">${formatBRL(totalGeral)}</div>
-        <div style="font-size:10px;color:var(--text3);margin-top:3px">todos os status · ${dados.length} ${dados.length === 1 ? 'item' : 'itens'}</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:3px">orçado · ${dados.length} ${dados.length === 1 ? 'item' : 'itens'}</div>
       </div>
       ${cardsStatus}
     </div>`;
